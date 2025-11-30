@@ -1,5 +1,19 @@
 Navod na instalaci:
+1) Stahnete si repo jako zip:
+<img width="990" height="421" alt="image" src="https://github.com/user-attachments/assets/f66ce940-a347-45bf-a260-ed459f06518f" />
 
+2) rozbalte ve svem PC zip
+3) Otevrete prohlizec
+4) Otevrete si stranku s doplnky/extensions (do url zadejte nasledujici link podle prohlizece)
+chrome - chrome://extensions/
+opera - opera://extensions/
+5) zakliknete si rezim pro vyvojare
+<img width="1130" height="123" alt="image" src="https://github.com/user-attachments/assets/3145649b-97c9-423a-94f3-08a9ee8a49e9" />
+6) kliknete na nacist rozbalene
+<img width="828" height="226" alt="image" src="https://github.com/user-attachments/assets/26ee7bcf-c348-4cc5-95d4-9b613b9827a6" />
+7) Vyberte slozku DE-extension
+<img width="1149" height="696" alt="image" src="https://github.com/user-attachments/assets/12404f87-82cf-4eb1-81fe-dd811acc83dd" />
+8) nyni by melo vse fungovat
 
 Co rozsireni dela:
 po instalaci se vam vedle ikonek na aktualizaci mapy, hromadneho kouzleni objevi nova ikona. 
