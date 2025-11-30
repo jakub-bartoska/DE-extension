@@ -1,4 +1,4 @@
-Navod na instalaci:
+<h1>Navod na instalaci:</h1>
 1) Stahnete si repo jako zip:
 <img width="990" height="421" alt="image" src="https://github.com/user-attachments/assets/f66ce940-a347-45bf-a260-ed459f06518f" />
 
@@ -15,7 +15,7 @@ opera - opera://extensions/
 <img width="1149" height="696" alt="image" src="https://github.com/user-attachments/assets/12404f87-82cf-4eb1-81fe-dd811acc83dd" />
 8) nyni by melo vse fungovat
 
-Co rozsireni dela:
+<h1>Co rozsireni dela:</h1>
 po instalaci se vam vedle ikonek na aktualizaci mapy, hromadneho kouzleni objevi nova ikona. 
 <img width="290" height="54" alt="image" src="https://github.com/user-attachments/assets/e2356c53-8088-464f-9962-526e27f10b19" />
 
