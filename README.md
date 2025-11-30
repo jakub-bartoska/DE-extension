@@ -40,6 +40,3 @@ Vysledek po prepoctu:
 
 Realny priklad - na mape je uz bohuzel dobojovano:
 <img width="2242" height="1012" alt="image" src="https://github.com/user-attachments/assets/8a577878-00ba-4614-a69c-866fd8dfdc4d" />
-
-Podporovane prohlizece: vsechny bezici na chromiu (google chrome, opera,...)
-
