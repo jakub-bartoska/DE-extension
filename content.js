@@ -15,11 +15,15 @@
         if (!menu) {
             return;
         }
-        let menuItem = createMenuItem();
-        menu.appendChild(menuItem);
+        let menuItemNatality = createMenuItem("natality");
+        let menuItemGold = createMenuItem("gold");
+        let menuItemMana = createMenuItem("mana");
+        menu.appendChild(menuItemNatality);
+        menu.appendChild(menuItemGold);
+        menu.appendChild(menuItemMana);
     }
 
-    function createMenuItem() {
+    function createMenuItem(type) {
         let img = document.createElement("img");
         img.src = chrome.runtime.getURL("images/menu-icon.png");
         img.class = "miniMenuItem cursorHand";
@@ -28,50 +32,51 @@
         img.height = 38;
         img.id = "natality-button";
 
-        img.setAttribute("display", "false");
+        img.setAttribute(type + "-display", "false");
 
-        img.addEventListener("click", displaySpellResults);
+        img.addEventListener("click", () => displaySpellResults(type));
 
         return img;
     }
 
-    function displaySpellResults() {
-        let natalityButton = document.getElementById("miniMenuContainer");
-        let displayed = natalityButton.getAttribute("display");
-        if (displayed == "true") {
-            document.querySelectorAll(".natality-indicator").forEach(el => el.remove());
-            natalityButton.setAttribute("display", "false");
+    function displaySpellResults(type) {
+        let mainMenu = document.getElementById("miniMenuContainer");
+        let displayed = mainMenu.getAttribute(type + "-display");
+        if (displayed === "true") {
+            document.querySelectorAll("." + type + "-indicator").forEach(el => el.remove());
+            mainMenu.setAttribute(type + "-display", "false");
             return;
         }
 
-        natalityButton.setAttribute("display", "true");
+        mainMenu.setAttribute(type + "-display", "true");
         (async () => {
             await getAllReports();
             let lands = document.getElementById("maps").getElementsByClassName("land");
             for (let land of lands) {
-                if (land.hasAttribute("data-b_natality")) {
-                    colorOwnLand(land);
+                var attribute = getAttributeByType(type);
+                if (land.hasAttribute(attribute)) {
+                    colorOwnLand(land, attribute);
                     continue;
                 }
-                colorLandFromReport(land);
+                colorLandFromReport(land, type);
             }
         })();
     }
 
-    function colorOwnLand(land) {
-        let natality = land.getAttribute("data-b_natality");
-        if (natality == '100') {
+    function colorOwnLand(land, attribute) {
+        let value = Number(land.getAttribute(attribute));
+        if (value === 100) {
             addBackground(land, neutralColor, borderCertainColor);
-        } else if (natality == '200') {
+        } else if (value > 100) {
             addBackground(land, positiveColor, borderCertainColor);
-        } else if (natality == '50') {
+        } else if (value < 100) {
             addBackground(land, negativeColor, borderCertainColor);
         } else {
-            console.log("unknown natality")
+            console.log("unknown value")
         }
     }
 
-    function colorLandFromReport(land) {
+    function colorLandFromReport(land, type) {
         let landName = land.getAttribute("data-name");
         let positive = 0;
         let negative = 0;
@@ -81,7 +86,7 @@
             positive += [...doc.querySelectorAll("tr")]
                 .filter(row => row.textContent.includes(landName))
                 .filter(row =>
-                    row.textContent.includes("Spokojenost") ||
+                    row.textContent.includes(getBasePositiveSpellByType(type)) ||
                     row.textContent.includes("Požehnání")
                 )
                 .map(row => row.nextElementSibling)
@@ -89,7 +94,7 @@
             negative += [...doc.querySelectorAll("tr")]
                 .filter(row => row.textContent.includes(landName))
                 .filter(row =>
-                    row.textContent.includes("Nespokojenost") ||
+                    row.textContent.includes(getBaseNegativeSpellByType(type)) ||
                     row.textContent.includes("Kletba")
                 )
                 .map(row => row.nextElementSibling)
@@ -101,11 +106,10 @@
                 .filter(row => row.textContent.includes("seslal") || row.textContent.includes("Seslal")).length;
             neutral += [...doc.querySelectorAll("tr")]
                 .filter(row => row.textContent.includes(landName))
-                .filter(row => row.textContent.includes("Neovlivnitelnost"))
+                .filter(row => row.textContent.includes(getBaseNeutralSpellByType(type)))
                 .map(row => row.nextElementSibling)
                 .filter(row => row.textContent.includes("seslal") || row.textContent.includes("Seslal")).length;
         }
-        console.log('landName: ' + landName + ' posivie: ' + positive + ' negative: ' + negative + ' dk: ' + dk + ' neutral: ' + neutral);
         if (neutral > 0) {
             addBackground(land, neutralColor, borderCertainColor);
         } else if (dk > 0 || negative > 1) {
@@ -124,6 +128,7 @@
             return;
         }
 
+        console.log("fetching reports");
         let allTeammatesIds = getAllTeammatesIds();
         let requests = allTeammatesIds.map(id =>
             fetch("https://www.darkelf.cz/hlaseni.asp?id_player=" + id)
@@ -168,5 +173,49 @@
         newDiv.style.border = '2px solid ' + borderColor;
 
         land.parentNode.insertBefore(newDiv, land);
+    }
+
+    function getAttributeByType(type) {
+        switch (type) {
+            case "natality":
+                return "data-b_natality";
+            case "gold":
+                return "data-b_gold";
+            case "mana":
+                return "data-b_mana";
+        }
+    }
+
+    function getBasePositiveSpellByType(type) {
+        switch (type) {
+            case "natality":
+                return "Spokojenost";
+            case "gold":
+                return "Příznivé počasí";
+            case "mana":
+                return "Magické klima";
+        }
+    }
+
+    function getBaseNegativeSpellByType(type) {
+        switch (type) {
+            case "natality":
+                return "Nespokojenost";
+            case "gold":
+                return "Krupobití";
+            case "mana":
+                return "Magický vír";
+        }
+    }
+
+    function getBaseNeutralSpellByType(type) {
+        switch (type) {
+            case "natality":
+                return "Neovlivnitelnost";
+            case "gold":
+                return "Uzdravení";
+            case "mana":
+                return "Uzdravení";
+        }
     }
 })();
