@@ -21,23 +21,23 @@ po instalaci se vam vedle ikonek na aktualizaci mapy, hromadneho kouzleni objevi
 
 Pokud na ni kliknete, tak se na mape zaznaci porodnost vsech zemi z vami dostupnych dat - pro vase zeme a zeme spoluhracu se vzdy obarvi spravne zemka podle porodnosti. Pro zeme neutralek/nepratel se obarvi podle toho jak vam a vasim spoluhracum prosla kouzla na tyto zemky. Neni znamo jestli tam souper hazel sva kouzla, proto barva nemusi odpovidat na 100% realite.
 
-Barvy:
-seda: neutralni porodnost
-zelena: 200% porodnost
-cervena: 50% porodnost, nebo na zem sla 2x nespokojenost
-zluta: na zem sla 1x nespokojenost
+Barvy:</br>
+seda: neutralni porodnost </br>
+zelena: 200% porodnost</br>
+cervena: 50% porodnost, nebo na zem sla 2x nespokojenost</br>
+zluta: na zem sla 1x nespokojenost</br>
 
-okraj kolecka:
-zeleny: na 100% je zobrazeni spravne
-zluty: realna porodnost se muze lisit kvuli akcim soupere.
+okraj kolecka:</br>
+zeleny: na 100% je zobrazeni spravne</br>
+zluty: realna porodnost se muze lisit kvuli akcim soupere.</br>
 
-Priklady:
+<h1>Priklady:</h1>
 Pred zakouzlenim:
 <img width="908" height="502" alt="image" src="https://github.com/user-attachments/assets/7e08d95f-d941-4098-a95d-f9400292dc66" />
 
 Vysledek po prepoctu:
 <img width="1034" height="502" alt="image" src="https://github.com/user-attachments/assets/1f53686f-9c5c-47c3-b8d6-fee6f87596c4" />
 
-Realny priklad - na mape je uz bohuzel dobojovano:
+Realny priklad:
 <img width="2241" height="1110" alt="image" src="https://github.com/user-attachments/assets/c0f7595e-f26e-4849-a58c-1cf678168a5a" />
 
