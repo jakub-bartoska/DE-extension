@@ -39,4 +39,5 @@ Vysledek po prepoctu:
 <img width="1034" height="502" alt="image" src="https://github.com/user-attachments/assets/1f53686f-9c5c-47c3-b8d6-fee6f87596c4" />
 
 Realny priklad - na mape je uz bohuzel dobojovano:
-<img width="2242" height="1012" alt="image" src="https://github.com/user-attachments/assets/8a577878-00ba-4614-a69c-866fd8dfdc4d" />
+<img width="2241" height="1110" alt="image" src="https://github.com/user-attachments/assets/c0f7595e-f26e-4849-a58c-1cf678168a5a" />
+
