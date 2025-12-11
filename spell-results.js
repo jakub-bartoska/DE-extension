@@ -15,40 +15,83 @@
         if (!menu) {
             return;
         }
-        let menuItemNatality = createMenuItem("natality");
-        let menuItemGold = createMenuItem("gold");
-        let menuItemMana = createMenuItem("mana");
-        menu.appendChild(menuItemNatality);
-        menu.appendChild(menuItemGold);
-        menu.appendChild(menuItemMana);
+        let base = createMenuItem("base");
+        var dropDown = createDropdown();
+        menu.appendChild(base);
+        menu.appendChild(dropDown);
     }
 
-    function createMenuItem(type) {
+    function createMenuItem() {
         let img = document.createElement("img");
-        img.src = chrome.runtime.getURL("images/menu-icon.png");
+        img.src = "../images/mapy/but_map_menu.gif";
         img.class = "miniMenuItem cursorHand";
         img.id = "displaySpellResults"
         img.width = 47;
         img.height = 38;
         img.id = "natality-button";
 
-        img.setAttribute(type + "-display", "false");
-
-        img.addEventListener("click", () => displaySpellResults(type));
+        img.addEventListener("click", () => displayDropdown());
 
         return img;
     }
 
-    function displaySpellResults(type) {
-        let mainMenu = document.getElementById("miniMenuContainer");
-        let displayed = mainMenu.getAttribute(type + "-display");
-        if (displayed === "true") {
-            document.querySelectorAll("." + type + "-indicator").forEach(el => el.remove());
-            mainMenu.setAttribute(type + "-display", "false");
-            return;
+    function displayDropdown() {
+        let dropdown = document.getElementById("display-results-dropdown");
+        let isHidden = window.getComputedStyle(dropdown).display === "none";
+        if (isHidden) {
+            dropdown.style.display = "block";
+        } else {
+            dropdown.style.display = "none";
         }
+    }
 
-        mainMenu.setAttribute(type + "-display", "true");
+    function createDropdown() {
+        let div = document.createElement("div");
+        div.id = "display-results-dropdown";
+        div.style.display = "none";
+        div.style.padding = "0px 8px 10px 8px";
+        div.style.left = "220px";
+        div.style.top = "46px";
+        div.style.position = "absolute";
+        div.style.zIndex = "50";
+        div.style.height = "auto";
+        div.style.width = "190px";
+        div.style.maxWidth = "210px";
+        div.style.border = "4px solid #220000";
+        div.style.backgroundColor = "#400000";
+        div.style.borderTopColor = "#521000";
+        div.style.borderRightColor = " #521000";
+        div.style.backgroundImage = "../images/pozadi/poz_drv.jpg";
+
+        const options = ["Porodnost", "Zlato", "Mana", "Nic"];
+
+        options.forEach(optionText => {
+            const label = document.createElement("label");
+            label.style.display = "block";
+            label.style.textAlign = "left";
+            label.style.cursor = "pointer";
+
+            const input = document.createElement("input");
+            input.type = "radio";
+            input.name = "results-display";
+            input.value = optionText;
+
+            input.addEventListener("change", () => {
+                document.querySelectorAll(".indicator").forEach(el => el.remove());
+                if (input.value !== "Nic") {
+                    displaySpellResults(input.value);
+                }
+            });
+
+            label.appendChild(input);
+            label.appendChild(document.createTextNode(" " + optionText));
+            div.appendChild(label);
+        });
+
+        return div;
+    }
+
+    function displaySpellResults(type) {
         (async () => {
             await getAllReports();
             let lands = document.getElementById("maps").getElementsByClassName("land");
@@ -160,7 +203,7 @@
         let left = parseFloat(landStyle.left);
 
         let newDiv = document.createElement("div");
-        newDiv.classList.add('natality-indicator');
+        newDiv.classList.add('indicator');
         newDiv.style.zIndex = '1';
         newDiv.style.pointerEvents = '1';
         newDiv.style.top = (top - 11) + 'px';
@@ -177,44 +220,44 @@
 
     function getAttributeByType(type) {
         switch (type) {
-            case "natality":
+            case "Porodnost":
                 return "data-b_natality";
-            case "gold":
+            case "Zlato":
                 return "data-b_gold";
-            case "mana":
+            case "Mana":
                 return "data-b_mana";
         }
     }
 
     function getBasePositiveSpellByType(type) {
         switch (type) {
-            case "natality":
+            case "Porodnost":
                 return "Spokojenost";
-            case "gold":
+            case "Zlato":
                 return "Příznivé počasí";
-            case "mana":
+            case "Mana":
                 return "Magické klima";
         }
     }
 
     function getBaseNegativeSpellByType(type) {
         switch (type) {
-            case "natality":
+            case "Porodnost":
                 return "Nespokojenost";
-            case "gold":
+            case "Zlato":
                 return "Krupobití";
-            case "mana":
+            case "Mana":
                 return "Magický vír";
         }
     }
 
     function getBaseNeutralSpellByType(type) {
         switch (type) {
-            case "natality":
+            case "Porodnost":
                 return "Neovlivnitelnost";
-            case "gold":
+            case "Zlato":
                 return "Uzdravení";
-            case "mana":
+            case "Mana":
                 return "Uzdravení";
         }
     }
