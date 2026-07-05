@@ -95,25 +95,129 @@
 
     // ------------------------------------------------ obarvení dle vlastníka
 
-    function colorForKey(key) {
-        // stabilní barva z hashe klíče; zlatý úhel = dobré rozlišení mnoha hráčů
-        let h = 2166136261;
-        for (let i = 0; i < key.length; i++) { h ^= key.charCodeAt(i); h = Math.imul(h, 16777619); }
-        const hue = ((h >>> 0) * 137.508) % 360;
-        const sat = 60 + ((h >>> 8) & 31);      // 60–91 %
-        const lig = 42 + ((h >>> 13) & 15);     // 42–57 %
-        return `hsl(${hue.toFixed(0)}, ${sat}%, ${lig}%)`;
+    // Dominantní (nejčastější sytá) barva vlajky hráče. Vlajka je 1. <img> v zemi;
+    // je same-origin, takže ji lze načíst do canvasu a přečíst pixely.
+    const _flagCache = {};
+    function flagColor(img) {
+        const src = img && img.getAttribute("src");
+        if (!src) return null;
+        if (src in _flagCache) return _flagCache[src];
+        let res = null;
+        try {
+            const w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+            if (w && h) {
+                const cv = document.createElement("canvas");
+                cv.width = w; cv.height = h;
+                const ctx = cv.getContext("2d");
+                ctx.drawImage(img, 0, 0);
+                const d = ctx.getImageData(0, 0, w, h).data, buckets = {};
+                for (let i = 0; i < d.length; i += 4) {
+                    if (d[i + 3] < 128) continue;
+                    const r = d[i], g = d[i + 1], b = d[i + 2];
+                    const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+                    if (mx - mn < 28 || mx < 50) continue; // šedivé/tmavé přeskočit
+                    const k = (r >> 5) + "," + (g >> 5) + "," + (b >> 5);
+                    const o = buckets[k] || (buckets[k] = { n: 0, r: 0, g: 0, b: 0 });
+                    o.n++; o.r += r; o.g += g; o.b += b;
+                }
+                let best = null;
+                for (const k in buckets) if (!best || buckets[k].n > best.n) best = buckets[k];
+                if (best) {
+                    let c = [best.r / best.n, best.g / best.n, best.b / best.n];
+                    const mx = Math.max(...c);
+                    if (mx < 100) c = c.map((v) => v * 100 / mx); // zesvětli hodně tmavé
+                    res = c.map(Math.round);
+                }
+            }
+        } catch (e) { /* tainted / nenačteno */ }
+        _flagCache[src] = res;
+        return res;
     }
+
+    // Perceptuální barevný prostor (Lab) a vzdálenost — pro poznání "moc podobných".
+    function rgb2lab(a) {
+        let [R, G, B] = [a[0] / 255, a[1] / 255, a[2] / 255].map(
+            (v) => (v > 0.04045 ? Math.pow((v + 0.055) / 1.055, 2.4) : v / 12.92));
+        let x = (R * 0.4124 + G * 0.3576 + B * 0.1805) / 0.95047;
+        let y = (R * 0.2126 + G * 0.7152 + B * 0.0722);
+        let z = (R * 0.0193 + G * 0.1192 + B * 0.9505) / 1.08883;
+        [x, y, z] = [x, y, z].map((v) => (v > 0.008856 ? Math.cbrt(v) : 7.787 * v + 16 / 116));
+        return [116 * y - 16, 500 * (x - y), 200 * (y - z)];
+    }
+    function dE(a, b) { const l = a[0] - b[0], p = a[1] - b[1], q = a[2] - b[2]; return Math.sqrt(l * l + p * p + q * q); }
+    function minDE(lab, arr) { let m = Infinity; for (const a of arr) m = Math.min(m, dE(lab, a)); return m; }
+
+    function hsl2rgb(h, s, l) {
+        s /= 100; l /= 100;
+        const c = (1 - Math.abs(2 * l - 1)) * s, x = c * (1 - Math.abs((h / 60) % 2 - 1)), m = l - c / 2;
+        let r, g, b;
+        if (h < 60)[r, g, b] = [c, x, 0]; else if (h < 120)[r, g, b] = [x, c, 0];
+        else if (h < 180)[r, g, b] = [0, c, x]; else if (h < 240)[r, g, b] = [0, x, c];
+        else if (h < 300)[r, g, b] = [x, 0, c]; else[r, g, b] = [c, 0, x];
+        return [Math.round((r + m) * 255), Math.round((g + m) * 255), Math.round((b + m) * 255)];
+    }
+    // sada dobře odlišených barev pro náhradu při kolizi
+    const DISTINCT = (() => {
+        const out = [];
+        for (const [s, l] of [[72, 50], [82, 42], [62, 60], [85, 34]])
+            for (let h = 0; h < 360; h += 30) out.push(hsl2rgb(h, s, l));
+        return out;
+    })();
+    const COLLISION_THRESHOLD = 26; // ΔE — pod tím jsou barvy "moc podobné"
+    const FILL_OP = 0.65;           // průhlednost výplně
+    const GRASS = [0, 132, 0];      // barva trávy (přes ni se výplň míchá)
+    // Lab výsledné barvy tak, jak reálně vypadá na mapě (výplň přes trávu) —
+    // podobnost počítáme na TOMTO, ne na čisté barvě, aby území šla rozeznat.
+    const onGrass = (c) => rgb2lab([0, 1, 2].map(
+        (i) => Math.round(c[i] * FILL_OP + GRASS[i] * (1 - FILL_OP))));
 
     async function colorByOwner(mode) { // "hrac" | "aliance" | null
         await ready();
         clearAll();
         if (!mode) return;
-        const attr = mode === "aliance" ? "data-id_alliance" : "data-id_player";
+
+        if (mode === "aliance") {
+            // aliance nemají vlajku → odlišná paleta podle id aliance
+            const byAli = {};
+            for (const land of maps.querySelectorAll(".land")) {
+                const aid = land.getAttribute("data-id_alliance");
+                if (!aid || aid === "0") continue;
+                (byAli[aid] || (byAli[aid] = [])).push(land.getAttribute("data-id"));
+            }
+            let i = 0;
+            for (const aid in byAli) {
+                const c = DISTINCT[(i++ * 7) % DISTINCT.length];
+                for (const id of byAli[aid]) fill(id, `rgb(${c[0]},${c[1]},${c[2]})`, { opacity: FILL_OP });
+            }
+            return;
+        }
+
+        // mode "hrac": dominantní barva vlajky + řešení kolizí
+        const players = {};
         for (const land of maps.querySelectorAll(".land")) {
-            const key = land.getAttribute(attr);
-            if (!key || key === "0") continue; // neutrální / bez aliance
-            fill(land.getAttribute("data-id"), colorForKey(key), { opacity: 0.55 });
+            const pid = land.getAttribute("data-id_player");
+            if (!pid || pid === "0") continue;
+            const p = players[pid] || (players[pid] = { img: land.querySelector("img"), lands: [] });
+            p.lands.push(land.getAttribute("data-id"));
+        }
+        const list = Object.values(players).map((p) => ({ lands: p.lands, flag: flagColor(p.img) }));
+        list.sort((a, b) => b.lands.length - a.lands.length); // větší hráči mají přednost na svou barvu
+
+        const assignedLab = [];
+        for (const pl of list) {
+            let color = pl.flag;
+            if (!color || minDE(onGrass(color), assignedLab) < COLLISION_THRESHOLD) {
+                // vyber z palety barvu, jejíž výsledek na mapě je nejvzdálenější
+                let best = null, bestD = -1;
+                for (const cand of DISTINCT) {
+                    const dd = minDE(onGrass(cand), assignedLab);
+                    if (dd > bestD) { bestD = dd; best = cand; }
+                }
+                color = best;
+            }
+            assignedLab.push(onGrass(color));
+            const css = `rgb(${color[0]},${color[1]},${color[2]})`;
+            for (const id of pl.lands) fill(id, css, { opacity: FILL_OP });
         }
     }
 

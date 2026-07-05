@@ -140,9 +140,11 @@ hrace, takze vlajky, vojsko a stavby zustavaji dobre videt.
 
 Na mape pribyde v horni liste **druha ikona**. Po kliknuti se otevre panel:
 
-- **Obarvit uzemi podle: Hracu / Aliancí / Nic** — obarvi kazdou zemi barvou jejiho vlastnika
-  (kazdy hrac jina barva), nebo podle aliance (spojenci stejna barva). Na prvni pohled je videt,
-  kdo co ovlada.
+- **Obarvit uzemi podle: Hracu / Aliancí / Nic** — obarvi kazdou zemi barvou jejiho vlastnika,
+  nebo podle aliance (spojenci stejna barva). Na prvni pohled je videt, kdo co ovlada.
+  Barva hrace se bere z **dominantni barvy jeho vlajky**; kdyz maji dva hraci moc podobnou
+  vlajku (i po smichani se zelenou mapou), jednomu se priradi jina, dostatecne odlisna barva,
+  aby se nepletli.
 - **Zvyraznit hranice** — obtahne kazdou zemi cerne, at jsou hranice jasne videt.
 
 Toto obarvovani pouziva i **Funkce 1** (kouzla) — misto puvodnich kolecek vyplni celou zem.
