@@ -118,9 +118,31 @@
     }
 
     // ------------------------------------------------------------- UI
+    //
+    // Panel je v Shadow DOM na <section> hostu. Mapa má agresivní CSS pravidlo,
+    // které dělá KAŽDÝ <div> velikost 39×39 px — kdyby byl panel běžný div v
+    // stránce, scvrknul by se. Shadow DOM izoluje obsah od CSS stránky a host
+    // není div, takže ho pravidlo `div{}` nechytí.
 
     const menu = document.getElementById("miniMenuContainer");
     if (menu) buildMenu();
+
+    const PANEL_CSS = `
+        .panel { box-sizing:border-box; display:flex; flex-direction:column; gap:9px;
+            width:max-content; padding:9px 11px; border:3px solid #220000;
+            border-top-color:#521000; border-radius:4px; background:#400000;
+            color:#e8d8b8; font:13px Arial,sans-serif; white-space:nowrap;
+            box-shadow:0 3px 8px rgba(0,0,0,.5); }
+        .title { font-weight:bold; text-align:center; }
+        .row { display:flex; gap:5px; }
+        .chip { cursor:pointer; border:1px solid #7a3030; border-radius:3px;
+            font:bold 12px Arial,sans-serif; padding:3px 10px; line-height:16px;
+            background:#5a1414; color:#e8c8a8; }
+        .chip:hover { background:#6e1a1a; }
+        .chip.active { background:#9a3018; border-color:#d68040; color:#fff2d8; }
+        .hr { height:1px; background:#7a3030; }
+        .bchip { align-self:flex-start; }
+    `;
 
     function buildMenu() {
         const btn = document.createElement("img");
@@ -129,62 +151,74 @@
         btn.title = "Obarvení území / hranice";
         btn.width = 47; btn.height = 38;
         btn.style.cursor = "pointer";
-        btn.style.filter = "hue-rotate(120deg)"; // odliš od stávající ikony
+        btn.style.filter = "hue-rotate(200deg)"; // odliš od stávající ikony
         btn.addEventListener("click", togglePanel);
         menu.appendChild(btn);
-        menu.appendChild(buildPanel());
-    }
-
-    function togglePanel() {
-        const d = document.getElementById("de-fill-panel");
-        d.style.display = d.style.display === "none" ? "block" : "none";
+        buildPanel();
     }
 
     function buildPanel() {
-        const div = document.createElement("div");
-        div.id = "de-fill-panel";
-        Object.assign(div.style, {
-            display: "none", position: "absolute", left: "220px", top: "46px",
-            zIndex: "60", padding: "10px 12px", width: "190px",
-            border: "4px solid #220000", borderTopColor: "#521000", borderRightColor: "#521000",
-            backgroundColor: "#400000", color: "#e8d8b8", font: "13px Arial, sans-serif",
-            textAlign: "left",
-        });
+        const host = document.createElement("section"); // NE div (mapa div mangluje)
+        host.id = "de-fill-host";
+        Object.assign(host.style, { position: "fixed", zIndex: "99999", display: "none" });
+        document.body.appendChild(host);
+        const sh = host.attachShadow({ mode: "open" });
+        const style = document.createElement("style");
+        style.textContent = PANEL_CSS;
+        sh.appendChild(style);
 
-        const h = document.createElement("div");
-        h.textContent = "Obarvit území podle:";
-        h.style.fontWeight = "bold";
-        h.style.marginBottom = "6px";
-        div.appendChild(h);
+        const panel = document.createElement("div");
+        panel.className = "panel";
 
-        [["hrac", "Hráčů"], ["aliance", "Aliancí"], ["", "Nic"]].forEach(([val, label], i) => {
-            const lab = document.createElement("label");
-            lab.style.display = "block";
-            lab.style.cursor = "pointer";
-            const inp = document.createElement("input");
-            inp.type = "radio"; inp.name = "de-fill-owner"; inp.value = val;
-            if (i === 2) inp.checked = true;
-            inp.addEventListener("change", () => colorByOwner(val || null));
-            lab.appendChild(inp);
-            lab.appendChild(document.createTextNode(" " + label));
-            div.appendChild(lab);
+        const title = document.createElement("div");
+        title.className = "title";
+        title.textContent = "Obarvit území podle:";
+        panel.appendChild(title);
+
+        const row = document.createElement("div");
+        row.className = "row";
+        const chips = {};
+        [["hrac", "Hráčů"], ["aliance", "Aliancí"], ["", "Vypnout"]].forEach(([val, label]) => {
+            const c = document.createElement("button");
+            c.type = "button"; c.className = "chip"; c.textContent = label;
+            if (val === "") c.classList.add("active");
+            chips[val] = c;
+            c.addEventListener("click", () => {
+                for (const k in chips) chips[k].classList.toggle("active", k === val);
+                colorByOwner(val || null);
+            });
+            row.appendChild(c);
         });
+        panel.appendChild(row);
 
         const hr = document.createElement("div");
-        hr.style.borderTop = "1px solid #7a3030";
-        hr.style.margin = "8px 0";
-        div.appendChild(hr);
+        hr.className = "hr";
+        panel.appendChild(hr);
 
-        const bl = document.createElement("label");
-        bl.style.display = "block";
-        bl.style.cursor = "pointer";
-        const bi = document.createElement("input");
-        bi.type = "checkbox";
-        bi.addEventListener("change", async () => { await ready(); setBorders(bi.checked); });
-        bl.appendChild(bi);
-        bl.appendChild(document.createTextNode(" Zvýraznit hranice"));
-        div.appendChild(bl);
+        let bOn = false;
+        const bchip = document.createElement("button");
+        bchip.type = "button"; bchip.className = "chip bchip";
+        bchip.textContent = "Zvýraznit hranice";
+        bchip.addEventListener("click", async () => {
+            bOn = !bOn;
+            bchip.classList.toggle("active", bOn);
+            await ready();
+            setBorders(bOn);
+        });
+        panel.appendChild(bchip);
 
-        return div;
+        sh.appendChild(panel);
+    }
+
+    function togglePanel() {
+        const host = document.getElementById("de-fill-host");
+        if (host.style.display === "none") {
+            const r = document.getElementById("de-fill-button").getBoundingClientRect();
+            host.style.left = Math.round(r.left) + "px";
+            host.style.top = Math.round(r.bottom + 5) + "px";
+            host.style.display = "block";
+        } else {
+            host.style.display = "none";
+        }
     }
 })();
