@@ -41,3 +41,16 @@ Vysledek po prepoctu:
 Realny priklad:
 <img width="2241" height="1110" alt="image" src="https://github.com/user-attachments/assets/c0f7595e-f26e-4849-a58c-1cf678168a5a" />
 
+<h1>Historie mapy (prohlizeni minulych dnu):</h1>
+V pravem hornim rohu mapy se objevi listka <b>Historie:</b> s preklikavatkem
+<code>◀ Den X ▶</code> a tlacitkem <b>Dnes</b>. Kliknutim na sipky prepnete
+zobrazeni cele mapy na stav z minuleho herniho dne — zeme se „prehodi" na to,
+kdo je v ten den vlastnil, jakou tam mel armadu, domy, stavby, vyhlasene valky
+i hrdiny. Tlacitko <b>Dnes</b> vrati aktualni (zivou) mapu.
+
+Data pochazeji z automatickeho archivu, ktery po kazdem prepoctu uklada snimek
+cele mapy kazde ligy (bezi na AWS, verejne read-only API). Historie se zacne
+plnit od okamziku nasazeni — kazdy dalsi herni den pribyde jako novy snimek.
+Ligy se objevuji automaticky, prihlaseni do hry neni potreba (cte se verejna
+spectator mapa).
+

@@ -9,11 +9,15 @@
       ],
       "js": [
         "spell-results.js",
-        "old-scripts.js"
+        "old-scripts.js",
+        "map-history.js"
       ],
       "all_frames": true,
       "run_at": "document_idle"
     }
+  ],
+  "host_permissions": [
+    "https://jromqobezam5ot4ixfszrbrjhu0dyjwb.lambda-url.eu-central-1.on.aws/*"
   ],
   "web_accessible_resources": [
     {
