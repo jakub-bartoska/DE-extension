@@ -164,8 +164,10 @@
             negative += [...doc.querySelectorAll("tr")]
                 .filter(row => rowIsAboutLand(row.textContent, landName))
                 .filter(row =>
-                    row.textContent.includes(getBaseNegativeSpellByType(type)) ||
-                    row.textContent.includes("Kletba")
+                    (row.textContent.includes(getBaseNegativeSpellByType(type)) ||
+                        row.textContent.includes("Kletba")) &&
+                    // "Dvojita Kletba" obsahuje "Kletba" - nepocitat ji sem, patri do dk
+                    !row.textContent.includes("Dvojitá Kletba")
                 )
                 .map(row => row.nextElementSibling)
                 .filter(row => row && (row.textContent.includes("seslal") || row.textContent.includes("Seslal"))).length;
