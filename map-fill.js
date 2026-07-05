@@ -19,6 +19,7 @@
     const NS = "http://www.w3.org/2000/svg";
     const MAP_W = 2244, MAP_H = 1542; // 3×748 × 3×514
     let svg = null, polys = {}, readyPromise = null;
+    let activeMode = null; // "hrac" | "aliance" | null — kvůli překreslení po změně mapy
 
     // ------------------------------------------------------------- vrstva
 
@@ -91,7 +92,13 @@
         for (const id in polys) polys[id].style.stroke = on ? "rgba(0,0,0,0.75)" : "none";
     }
 
-    window.DEfill = { fill, clearAll, setBorders, ready, hasRegion: (id) => !!polys[id] };
+    // reapply: znovu obarví podle aktuálně zobrazených vlastníků (po přehození
+    // času v historii — vlastníci zemí se změní, barvy se musí překreslit).
+    window.DEfill = {
+        fill, clearAll, setBorders, ready,
+        reapply: () => colorByOwner(activeMode),
+        hasRegion: (id) => !!polys[id],
+    };
 
     // ------------------------------------------------ obarvení dle vlastníka
 
@@ -172,6 +179,7 @@
         (i) => Math.round(c[i] * FILL_OP + GRASS[i] * (1 - FILL_OP))));
 
     async function colorByOwner(mode) { // "hrac" | "aliance" | null
+        activeMode = mode;
         await ready();
         clearAll();
         if (!mode) return;

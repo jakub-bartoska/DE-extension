@@ -150,6 +150,9 @@ Na mape pribyde v horni liste **druha ikona**. Po kliknuti se otevre panel:
 
 Toto obarvovani pouziva i **Funkce 1** (kouzla) — misto puvodnich kolecek vyplni celou zem.
 
+Obarveni **funguje i v historii** (Funkce 2): kdyz se vracis v case a zeme zmenila
+majitele, prebarvi se podle toho, komu patrila v dany den.
+
 ## Jak to funguje "pod kapotou"
 
 Tvary vsech ~431 zemi jsou **predpocitane** (v souboru `regions.json`). Vznikly jednou z ciste

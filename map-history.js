@@ -192,6 +192,7 @@
         // živá mapa (jen u aktuální epochy, na slotu za posledním dnem)
         if (zvolenyVek === aktualniVek && idx >= snimky.length) {
             restoreLive();
+            reapplyFill();
             updateLabel();
             return;
         }
@@ -203,6 +204,7 @@
                 "/stav/" + encodeURIComponent(liga) + "?snap=" + encodeURIComponent(snimky[idx].snap)
             );
             applySnapshot(snap);
+            reapplyFill();
             updateLabel();
         } catch (e) {
             console.error("DE historie: nelze načíst snímek", e);
@@ -216,8 +218,18 @@
 
     function saveLiveOnce() {
         if (zivyMapsHTML === null) {
+            // Fill vrstvu (#de-fill-svg z map-fill.js) do zálohy nezahrnovat —
+            // spravuje ji map-fill zvlášť. Dočasně ji vyjmeme, uložíme, vrátíme.
+            const fill = maps.querySelector("#de-fill-svg");
+            if (fill) fill.remove();
             zivyMapsHTML = maps.innerHTML;
+            if (fill) maps.appendChild(fill);
         }
+    }
+
+    // Po přehození času překreslit obarvení podle nových vlastníků (pokud běží).
+    function reapplyFill() {
+        if (window.DEfill && window.DEfill.reapply) window.DEfill.reapply();
     }
 
     function setAttr(el, name, value) {
@@ -260,8 +272,12 @@
     }
 
     function restoreLive() {
-        if (zivyMapsHTML !== null) {
-            maps.innerHTML = zivyMapsHTML;
-        }
+        if (zivyMapsHTML === null) return;
+        // Zachovat fill vrstvu — jinak by ji nahrazení innerHTML zničilo a
+        // map-fill by přišel o reference na polygony.
+        const fill = maps.querySelector("#de-fill-svg");
+        if (fill) fill.remove();
+        maps.innerHTML = zivyMapsHTML;
+        if (fill) maps.appendChild(fill);
     }
 })();
