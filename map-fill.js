@@ -95,13 +95,13 @@
 
     // ------------------------------------------------ obarvení dle vlastníka
 
-    // Dominantní (nejčastější sytá) barva vlajky hráče. Vlajka je 1. <img> v zemi;
-    // je same-origin, takže ji lze načíst do canvasu a přečíst pixely.
-    const _flagCache = {};
-    function flagColor(img) {
+    // Dominantní (nejčastější sytá) barva obrázku — vlajky hráče nebo erbu aliance.
+    // Obrázky jsou same-origin, takže je lze načíst do canvasu a přečíst pixely.
+    const _colCache = {};
+    function dominantColor(img) {
         const src = img && img.getAttribute("src");
         if (!src) return null;
-        if (src in _flagCache) return _flagCache[src];
+        if (src in _colCache) return _colCache[src];
         let res = null;
         try {
             const w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
@@ -130,7 +130,7 @@
                 }
             }
         } catch (e) { /* tainted / nenačteno */ }
-        _flagCache[src] = res;
+        _colCache[src] = res;
         return res;
     }
 
@@ -176,36 +176,33 @@
         clearAll();
         if (!mode) return;
 
-        if (mode === "aliance") {
-            // aliance nemají vlajku → odlišná paleta podle id aliance
-            const byAli = {};
-            for (const land of maps.querySelectorAll(".land")) {
-                const aid = land.getAttribute("data-id_alliance");
-                if (!aid || aid === "0") continue;
-                (byAli[aid] || (byAli[aid] = [])).push(land.getAttribute("data-id"));
-            }
-            let i = 0;
-            for (const aid in byAli) {
-                const c = DISTINCT[(i++ * 7) % DISTINCT.length];
-                for (const id of byAli[aid]) fill(id, `rgb(${c[0]},${c[1]},${c[2]})`, { opacity: FILL_OP });
-            }
-            return;
-        }
-
-        // mode "hrac": dominantní barva vlajky + řešení kolizí
-        const players = {};
+        // hráč → barva z vlajky (1. <img> v zemi); aliance → barva z erbu
+        // (obrázek z images/e/…, sdílený všemi členy aliance).
+        const isAli = mode === "aliance";
+        const attr = isAli ? "data-id_alliance" : "data-id_player";
+        const groups = {};
         for (const land of maps.querySelectorAll(".land")) {
-            const pid = land.getAttribute("data-id_player");
-            if (!pid || pid === "0") continue;
-            const p = players[pid] || (players[pid] = { img: land.querySelector("img"), lands: [] });
-            p.lands.push(land.getAttribute("data-id"));
+            const key = land.getAttribute(attr);
+            if (!key || key === "0") continue;
+            const g = groups[key] || (groups[key] = {
+                img: isAli ? land.querySelector("img[src*='/e/']") : land.querySelector("img"),
+                lands: [],
+            });
+            g.lands.push(land.getAttribute("data-id"));
         }
-        const list = Object.values(players).map((p) => ({ lands: p.lands, flag: flagColor(p.img) }));
-        list.sort((a, b) => b.lands.length - a.lands.length); // větší hráči mají přednost na svou barvu
+        // seed barvou trávy — aby žádná výplň nesplynula s mapou (grass-zelená)
+        // ani nechyběla (černobílý erb) → dostane odlišnou viditelnou náhradu.
+        const grassLab = rgb2lab(GRASS);
+        const usable = (c) => c && dE(onGrass(c), grassLab) >= COLLISION_THRESHOLD;
 
-        const assignedLab = [];
-        for (const pl of list) {
-            let color = pl.flag;
+        const list = Object.values(groups).map((g) => ({ lands: g.lands, base: dominantColor(g.img) }));
+        // pořadí: nejdřív ti s POUŽITELNOU vlastní barvou (ať si ji nechají), pak
+        // podle velikosti; bezbarví/splývající dostanou náhradu až nakonec.
+        list.sort((a, b) => (usable(b.base) - usable(a.base)) || (b.lands.length - a.lands.length));
+
+        const assignedLab = [grassLab];
+        for (const gr of list) {
+            let color = gr.base;
             if (!color || minDE(onGrass(color), assignedLab) < COLLISION_THRESHOLD) {
                 // vyber z palety barvu, jejíž výsledek na mapě je nejvzdálenější
                 let best = null, bestD = -1;
@@ -217,7 +214,7 @@
             }
             assignedLab.push(onGrass(color));
             const css = `rgb(${color[0]},${color[1]},${color[2]})`;
-            for (const id of pl.lands) fill(id, css, { opacity: FILL_OP });
+            for (const id of gr.lands) fill(id, css, { opacity: FILL_OP });
         }
     }
 
