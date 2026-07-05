@@ -1,9 +1,12 @@
 # DE-extension
 
-Rozsireni do prohlizece pro hru **Dark Elf** (darkelf.cz). Prida na herni mapu dve funkce:
+Rozsireni do prohlizece pro hru **Dark Elf** (darkelf.cz). Prida na herni mapu tyto funkce:
 
-- **Barveni mapy podle kouzel** — ukaze odhadovanou porodnost zemi z hlaseni tvych a spoluhracu.
+- **Barveni mapy podle kouzel** — vybarvi zeme podle odhadovane porodnosti z hlaseni tvych a spoluhracu.
 - **Historie mapy** — umozni preklikavat mapu na minule herni dny a videt, jak svet vypadal drive.
+- **Vybarveni uzemi podle vlastnika / aliance** — na prvni pohled je videt, kdo co ovlada.
+
+A navic drobne pomucky na strankach zemi a hlaseni (odhad obrany neutralek, odhady sil v boji).
 
 Funguje v prohlizecich zalozenych na Chromiu (Chrome, Opera, Edge, Brave, ...).
 
@@ -156,11 +159,28 @@ majitele, prebarvi se podle toho, komu patrila v dany den.
 ## Jak to funguje "pod kapotou"
 
 Tvary vsech ~431 zemi jsou **predpocitane** (v souboru `regions.json`). Vznikly jednou z ciste
-stare grafiky mapy metodou **watershed** — kazdy bod souse i vnitrni jezera se priradi nejblizsi
-zemi, ohraniceno nakreslenymi hranicemi; more (voda napojena na okraj mapy) se vynecha. Diky tomu
-vypln dosahuje az k hranicim (zadne neobarvene pruhy) a pokryva i jezera uvnitr zemi. Za behu se
-nic nepocita — jen se polozi pres mapu prusvitná SVG vrstva a nastavi se `fill` u prislusneho
-tvaru. Diky tomu je to okamzite a **nezatezuje prohlizec**.
+stare grafiky mapy metodou **watershed** — kazdy bod souse i mala vnitrni jezera se priradi
+nejblizsi zemi, ohraniceno nakreslenymi hranicemi. Voda u okraje mapy i velka jezera se povazuji
+za **more** a nevybarvuji se; jen mala jezera uvnitr zeme se vybarvi jako jeji soucast. Diky tomu
+vypln dosahuje az k hranicim (zadne neobarvene pruhy) a pokryva i mala jezera. Za behu se nic
+nepocita — jen se polozi pres mapu prusvitná SVG vrstva a nastavi se `fill` u prislusneho tvaru.
+Diky tomu je to okamzite a **nezatezuje prohlizec**.
 
 Hranice zemi jsou v stare i nove grafice na stejnych pixelech, takze vyplne sedi **at hrajes s
 jakoukoli grafikou**.
+
+---
+
+# Dalsi drobne pomucky
+
+Krome mapy pridava rozsireni i par pomucek na dalsich strankach hry:
+
+- **Odhad obrany neutralky** — na strance neobsazene zeme (`l.asp`) spocita pravdepodobne
+  slozeni jeji obrany.
+- **Magicka hlaseni k zemi** — na strance zeme sesbira z hlaseni tvych spoluhracu kouzla,
+  ktera na tu zem prosla.
+- **Odhady sil v boji** — v hlasenich (`hlaseni.asp`) k utokum/obranam doplni odhadovanou silu
+  utoku, resp. obrany, z poctu nasazenych a padlych jednotek.
+
+(Tyto pomucky pochazeji z puvodnich uzivatelskych skriptu a parsuji stranky hry — kdyby hra
+zmenila rozlozeni stranek, mohou prestat fungovat.)
