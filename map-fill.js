@@ -124,9 +124,6 @@
     // stránce, scvrknul by se. Shadow DOM izoluje obsah od CSS stránky a host
     // není div, takže ho pravidlo `div{}` nechytí.
 
-    const menu = document.getElementById("miniMenuContainer");
-    if (menu) buildMenu();
-
     const PANEL_CSS = `
         .panel { box-sizing:border-box; display:flex; flex-direction:column; gap:9px;
             width:max-content; padding:9px 11px; border:3px solid #220000;
@@ -143,6 +140,10 @@
         .hr { height:1px; background:#7a3030; }
         .bchip { align-self:flex-start; }
     `;
+
+    // až po definici PANEL_CSS (const nelze použít před svým řádkem)
+    const menu = document.getElementById("miniMenuContainer");
+    if (menu) buildMenu();
 
     function buildMenu() {
         const btn = document.createElement("img");
