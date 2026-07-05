@@ -24,7 +24,7 @@
     function createMenuItem() {
         let img = document.createElement("img");
         img.src = "../images/mapy/but_map_menu.gif";
-        img.class = "miniMenuItem cursorHand";
+        img.className = "miniMenuItem cursorHand";
         img.id = "displaySpellResults"
         img.width = 47;
         img.height = 38;
@@ -119,6 +119,33 @@
         }
     }
 
+    let allLandNamesCache = null;
+
+    function getAllLandNames() {
+        if (!allLandNamesCache) {
+            let lands = document.getElementById("maps").getElementsByClassName("land");
+            allLandNamesCache = [...new Set(
+                [...lands].map(l => l.getAttribute("data-name")).filter(Boolean)
+            )];
+        }
+        return allLandNamesCache;
+    }
+
+    // Zem se v hlaseni pozna podle nazvu. Nazvy ale casto byvaji prefixem jinych
+    // (napr. "Usti" vs "Usti nad Labem") a pouhy includes() by radek pripsal obema.
+    // Radek proto pocitame pro danou zem jen tehdy, kdyz NEobsahuje jiny, delsi
+    // nazev zeme, ktery tento nazev v sobe ma (tzn. vyhrava nejdelsi shoda).
+    function rowIsAboutLand(text, landName) {
+        if (!text.includes(landName)) {
+            return false;
+        }
+        return !getAllLandNames().some(other =>
+            other.length > landName.length &&
+            other.includes(landName) &&
+            text.includes(other)
+        );
+    }
+
     function colorLandFromReport(land, type) {
         let landName = land.getAttribute("data-name");
         let positive = 0;
@@ -127,31 +154,31 @@
         let neutral = 0;
         for (let doc of allReports) {
             positive += [...doc.querySelectorAll("tr")]
-                .filter(row => row.textContent.includes(landName))
+                .filter(row => rowIsAboutLand(row.textContent, landName))
                 .filter(row =>
                     row.textContent.includes(getBasePositiveSpellByType(type)) ||
                     row.textContent.includes("Požehnání")
                 )
                 .map(row => row.nextElementSibling)
-                .filter(row => row.textContent.includes("seslal") || row.textContent.includes("Seslal")).length;
+                .filter(row => row && (row.textContent.includes("seslal") || row.textContent.includes("Seslal"))).length;
             negative += [...doc.querySelectorAll("tr")]
-                .filter(row => row.textContent.includes(landName))
+                .filter(row => rowIsAboutLand(row.textContent, landName))
                 .filter(row =>
                     row.textContent.includes(getBaseNegativeSpellByType(type)) ||
                     row.textContent.includes("Kletba")
                 )
                 .map(row => row.nextElementSibling)
-                .filter(row => row.textContent.includes("seslal") || row.textContent.includes("Seslal")).length;
+                .filter(row => row && (row.textContent.includes("seslal") || row.textContent.includes("Seslal"))).length;
             dk += [...doc.querySelectorAll("tr")]
-                .filter(row => row.textContent.includes(landName))
+                .filter(row => rowIsAboutLand(row.textContent, landName))
                 .filter(row => row.textContent.includes("Dvojitá Kletba"))
                 .map(row => row.nextElementSibling)
-                .filter(row => row.textContent.includes("seslal") || row.textContent.includes("Seslal")).length;
+                .filter(row => row && (row.textContent.includes("seslal") || row.textContent.includes("Seslal"))).length;
             neutral += [...doc.querySelectorAll("tr")]
-                .filter(row => row.textContent.includes(landName))
+                .filter(row => rowIsAboutLand(row.textContent, landName))
                 .filter(row => row.textContent.includes(getBaseNeutralSpellByType(type)))
                 .map(row => row.nextElementSibling)
-                .filter(row => row.textContent.includes("seslal") || row.textContent.includes("Seslal")).length;
+                .filter(row => row && (row.textContent.includes("seslal") || row.textContent.includes("Seslal"))).length;
         }
         if (neutral > 0) {
             addBackground(land, neutralColor, borderCertainColor);
