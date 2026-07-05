@@ -20,6 +20,8 @@
     const MAP_W = 2244, MAP_H = 1542; // 3×748 × 3×514
     let svg = null, polys = {}, readyPromise = null;
     let activeMode = null; // "hrac" | "aliance" | null — kvůli překreslení po změně mapy
+    // stabilní barvy: klíč (id hráče/aliance) → barva, drženo napříč dny historie
+    const colorCache = { hrac: {}, aliance: {} };
 
     // ------------------------------------------------------------- vrstva
 
@@ -208,18 +210,29 @@
             });
             g.lands.push(land.getAttribute("data-id"));
         }
-        // seed barvou trávy — aby žádná výplň nesplynula s mapou (grass-zelená)
-        // ani nechyběla (černobílý erb) → dostane odlišnou viditelnou náhradu.
+        // Barvu drží cache napříč dny → hráč/aliance má vždy stejnou barvu, ať
+        // jsem kdekoli v historii. Kolize se řeší proti trávě + VŠEM už přiřazeným
+        // barvám (i klíčům, co teď nejsou na mapě), aby si nový nevzal cizí barvu.
+        const cache = colorCache[mode];
         const grassLab = rgb2lab(GRASS);
         const usable = (c) => c && dE(onGrass(c), grassLab) >= COLLISION_THRESHOLD;
 
-        const list = Object.values(groups).map((g) => ({ lands: g.lands, base: dominantColor(g.img) }));
-        // pořadí: nejdřív ti s POUŽITELNOU vlastní barvou (ať si ji nechají), pak
-        // podle velikosti; bezbarví/splývající dostanou náhradu až nakonec.
-        list.sort((a, b) => (usable(b.base) - usable(a.base)) || (b.lands.length - a.lands.length));
-
         const assignedLab = [grassLab];
-        for (const gr of list) {
+        for (const k in cache) assignedLab.push(onGrass(cache[k]));
+
+        const entries = Object.entries(groups);
+        // už přiřazení (v cache) → jen vyplň uloženou barvou
+        for (const [key, g] of entries) {
+            if (!cache[key]) continue;
+            const c = cache[key];
+            for (const id of g.lands) fill(id, `rgb(${c[0]},${c[1]},${c[2]})`, { opacity: FILL_OP });
+        }
+        // noví (bez cache) → přiřaď barvu, ulož do cache; ti s použitelnou vlastní
+        // barvou první (ať si ji nechají), pak podle velikosti.
+        const novi = entries.filter(([key]) => !cache[key])
+            .map(([key, g]) => ({ key, lands: g.lands, base: dominantColor(g.img) }));
+        novi.sort((a, b) => (usable(b.base) - usable(a.base)) || (b.lands.length - a.lands.length));
+        for (const gr of novi) {
             let color = gr.base;
             if (!color || minDE(onGrass(color), assignedLab) < COLLISION_THRESHOLD) {
                 // náhrada: první barva z palety JASNĚ odlišná (≥ FALLBACK_SEP) od
@@ -236,6 +249,7 @@
                     color = best;
                 }
             }
+            cache[gr.key] = color;
             assignedLab.push(onGrass(color));
             const css = `rgb(${color[0]},${color[1]},${color[2]})`;
             for (const id of gr.lands) fill(id, css, { opacity: FILL_OP });

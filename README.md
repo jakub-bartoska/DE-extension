@@ -154,7 +154,8 @@ Na mape pribyde v horni liste **druha ikona**. Po kliknuti se otevre panel:
 Toto obarvovani pouziva i **Funkce 1** (kouzla) — misto puvodnich kolecek vyplni celou zem.
 
 Obarveni **funguje i v historii** (Funkce 2): kdyz se vracis v case a zeme zmenila
-majitele, prebarvi se podle toho, komu patrila v dany den.
+majitele, prebarvi se podle toho, komu patrila v dany den. Kazdy hrac (resp. aliance)
+ma pritom **vzdy stejnou barvu**, at jsi kdekoli v historii — barvy se drzi napric dny.
 
 ## Jak to funguje "pod kapotou"
 
