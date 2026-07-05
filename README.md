@@ -1,56 +1,129 @@
-<h1>Navod na instalaci:</h1>
-1) Stahnete si repo jako zip:
-<img width="990" height="421" alt="image" src="https://github.com/user-attachments/assets/f66ce940-a347-45bf-a260-ed459f06518f" />
+# DE-extension
 
-2) rozbalte ve svem PC zip
-3) Otevrete prohlizec
-4) Otevrete si stranku s doplnky/extensions (do url zadejte nasledujici link podle prohlizece)
-chrome - chrome://extensions/
-opera - opera://extensions/
-5) zakliknete si rezim pro vyvojare
-<img width="1130" height="123" alt="image" src="https://github.com/user-attachments/assets/3145649b-97c9-423a-94f3-08a9ee8a49e9" />
-6) kliknete na nacist rozbalene
-<img width="828" height="226" alt="image" src="https://github.com/user-attachments/assets/26ee7bcf-c348-4cc5-95d4-9b613b9827a6" />
-7) Vyberte slozku DE-extension
-<img width="1149" height="696" alt="image" src="https://github.com/user-attachments/assets/12404f87-82cf-4eb1-81fe-dd811acc83dd" />
-8) nyni by melo vse fungovat
+Rozsireni do prohlizece pro hru **Dark Elf** (darkelf.cz). Prida na herni mapu dve funkce:
 
-<h1>Co rozsireni dela:</h1>
-po instalaci se vam vedle ikonek na aktualizaci mapy, hromadneho kouzleni objevi nova ikona. 
-<img width="290" height="54" alt="image" src="https://github.com/user-attachments/assets/e2356c53-8088-464f-9962-526e27f10b19" />
+- **Barveni mapy podle kouzel** — ukaze odhadovanou porodnost zemi z hlaseni tvych a spoluhracu.
+- **Historie mapy** — umozni preklikavat mapu na minule herni dny a videt, jak svet vypadal drive.
 
-Pokud na ni kliknete, tak se na mape zaznaci porodnost vsech zemi z vami dostupnych dat - pro vase zeme a zeme spoluhracu se vzdy obarvi spravne zemka podle porodnosti. Pro zeme neutralek/nepratel se obarvi podle toho jak vam a vasim spoluhracum prosla kouzla na tyto zemky. Neni znamo jestli tam souper hazel sva kouzla, proto barva nemusi odpovidat na 100% realite.
+Funguje v prohlizecich zalozenych na Chromiu (Chrome, Opera, Edge, Brave, ...).
 
-Barvy:</br>
-seda: neutralni porodnost </br>
-zelena: 200% porodnost</br>
-cervena: 50% porodnost, nebo na zem sla 2x nespokojenost</br>
-zluta: na zem sla 1x nespokojenost</br>
+---
 
-okraj kolecka:</br>
-zeleny: na 100% je zobrazeni spravne</br>
-zluty: realna porodnost se muze lisit kvuli akcim soupere.</br>
+# Instalace
 
-<h1>Priklady:</h1>
+Rozsireni neni v obchode — instaluje se jako "rozbalene", tzn. nacte se primo ze slozky na disku.
+
+**1) Stahni repo jako ZIP** (zelene tlacitko `Code` -> `Download ZIP`):
+
+<img width="990" height="421" alt="stazeni zip" src="https://github.com/user-attachments/assets/f66ce940-a347-45bf-a260-ed459f06518f" />
+
+**2) Rozbal ZIP** nekam na disk. Slozku uz pak nemaz ani neprejmenovavej — prohlizec z ni rozsireni nacita napevno.
+
+**3) Otevri stranku s rozsirenimi** (podle prohlizece zadej do adresniho radku):
+
+- Chrome: `chrome://extensions/`
+- Opera: `opera://extensions/`
+- Edge: `edge://extensions/`
+
+**4) Vpravo nahore zapni Rezim pro vyvojare** (Developer mode):
+
+<img width="1130" height="123" alt="rezim pro vyvojare" src="https://github.com/user-attachments/assets/3145649b-97c9-423a-94f3-08a9ee8a49e9" />
+
+**5) Klikni na Nacist rozbalene** (Load unpacked):
+
+<img width="828" height="226" alt="nacist rozbalene" src="https://github.com/user-attachments/assets/26ee7bcf-c348-4cc5-95d4-9b613b9827a6" />
+
+**6) Vyber rozbalenou slozku `DE-extension`** — tu, ve ktere lezi soubor `manifest.json`:
+
+<img width="1149" height="696" alt="vyber slozky" src="https://github.com/user-attachments/assets/12404f87-82cf-4eb1-81fe-dd811acc83dd" />
+
+**7) Hotovo.** Otevri (nebo obnov klavesou **F5**) mapu ve hre a funkce se objevi primo na ni.
+
+> **Aktualizace na novou verzi:** stahni novy ZIP a nahrad jim slozku, nebo si repo naklonuj pres `git`.
+> Pak na strance `chrome://extensions/` klikni u DE-extension na obnovit (↻) a dej **F5** na mape.
+
+---
+
+# Funkce 1: Barveni mapy podle kouzel
+
+Po instalaci se na mape vedle ikonek (aktualizace mapy, hromadne kouzleni) objevi **nova ikona**:
+
+<img width="290" height="54" alt="nova ikona" src="https://github.com/user-attachments/assets/e2356c53-8088-464f-9962-526e27f10b19" />
+
+Po kliknuti a vyberu typu (Porodnost / Zlato / Mana) rozsireni obarvi zeme na mape podle toho,
+jak na ne prosla kouzla — vychazi z **hlaseni tebe a tvych spoluhracu**:
+
+- **Tve zeme a zeme spoluhracu** se obarvi vzdy spravne (porodnost znas presne).
+- **Neutralky a nepratele** se obarvi jen podle kouzel, ktera videli tvoji lide. Jestli tam
+  kouzlil i souper, nevis — proto barva **nemusi sedet na 100 %**.
+
+**Barva kolecka:**
+
+| barva   | vyznam                                        |
+|---------|-----------------------------------------------|
+| seda    | neutralni porodnost (100 %)                   |
+| zelena  | 200 % porodnost                               |
+| zluta   | na zem sla 1x Nespokojenost                   |
+| cervena | 50 % porodnost, nebo na zem sla 2x Nespokojenost |
+
+**Okraj kolecka:**
+
+| okraj  | vyznam                                              |
+|--------|-----------------------------------------------------|
+| zeleny | zobrazeni je na 100 % spravne                       |
+| zluty  | realna porodnost se muze lisit kvuli akcim soupere  |
+
+### Priklady
+
 Pred zakouzlenim:
-<img width="908" height="502" alt="image" src="https://github.com/user-attachments/assets/7e08d95f-d941-4098-a95d-f9400292dc66" />
+
+<img width="908" height="502" alt="pred zakouzlenim" src="https://github.com/user-attachments/assets/7e08d95f-d941-4098-a95d-f9400292dc66" />
 
 Vysledek po prepoctu:
-<img width="1034" height="502" alt="image" src="https://github.com/user-attachments/assets/1f53686f-9c5c-47c3-b8d6-fee6f87596c4" />
+
+<img width="1034" height="502" alt="po prepoctu" src="https://github.com/user-attachments/assets/1f53686f-9c5c-47c3-b8d6-fee6f87596c4" />
 
 Realny priklad:
-<img width="2241" height="1110" alt="image" src="https://github.com/user-attachments/assets/c0f7595e-f26e-4849-a58c-1cf678168a5a" />
 
-<h1>Historie mapy (prohlizeni minulych dnu):</h1>
-V pravem hornim rohu mapy se objevi listka <b>Historie:</b> s preklikavatkem
-<code>◀ Den X ▶</code> a tlacitkem <b>Dnes</b>. Kliknutim na sipky prepnete
-zobrazeni cele mapy na stav z minuleho herniho dne — zeme se „prehodi" na to,
-kdo je v ten den vlastnil, jakou tam mel armadu, domy, stavby, vyhlasene valky
-i hrdiny. Tlacitko <b>Dnes</b> vrati aktualni (zivou) mapu.
+<img width="2241" height="1110" alt="realny priklad" src="https://github.com/user-attachments/assets/c0f7595e-f26e-4849-a58c-1cf678168a5a" />
 
-Data pochazeji z automatickeho archivu, ktery po kazdem prepoctu uklada snimek
-cele mapy kazde ligy (bezi na AWS, verejne read-only API). Historie se zacne
-plnit od okamziku nasazeni — kazdy dalsi herni den pribyde jako novy snimek.
-Ligy se objevuji automaticky, prihlaseni do hry neni potreba (cte se verejna
-spectator mapa).
+---
 
+# Funkce 2: Historie mapy
+
+Umozni podivat se, jak mapa vypadala v **minulych hernich dnech** — kdo ktere zeme vlastnil,
+jak byl silny, co mel postavene, kde byly vyhlasene valky a kde stali hrdinove.
+
+## Jak se to ovlada
+
+V **pravem hornim rohu mapy** se objevi listka:
+
+```
+Historie:   ◀   Den X   ▶   Dnes
+```
+
+- **◀ / ▶** — preklikne mapu na predchozi / dalsi herni den. Cela mapa se prekresli do stavu
+  z toho dne: vlajky (kdo zem vlastnil), sila vojska, domy a stavby, vyhlasene valky i hrdinove.
+- **Dnes** — vrati aktualni (zivou) mapu.
+
+## Jak to funguje "pod kapotou"
+
+Hra si historii mapy **sama nedrzi** — na mape je vzdy jen aktualni stav z posledniho prepoctu.
+Jakmile prijde dalsi prepocet, predchozi stav je nenavratne prepsany. Proto k rozsireni patri
+**automaticky archiv**, ktery ty stavy zaznamenava:
+
+1. Na pozadi (na serveru AWS) bezi ukladac. Po kazdem prepoctu si stahne **verejnou spectator
+   mapu** kazde ligy (prihlaseni do hry neni potreba) a ulozi z ni snimek celeho sveta.
+2. Rozsireni si tyto snimky stahuje z verejneho **read-only API** a pri volbe dne jimi "prehodi"
+   obrazky na mape.
+
+## Co je dobre vedet
+
+- **Historie se plni az od chvile, kdy archiv bezi.** Dny starsi nez zacatek sberu nejsou
+  k dispozici. Kazdy novy herni den pribyde jako dalsi snimek — cim dele to bezi, tim delsi
+  historii uvidis.
+- **Ligy se pridavaji samy** — archiv si sam najde vsechny hrajici ligy, nic nenastavujes.
+- **Zadne prihlaseni ani klic** — data z mapy jsou verejna, takze API je jen pro cteni a
+  rozsireni k nemu nepotrebuje zadne heslo.
+- Kdyz liga dohraje a restartuje se (den spadne zpet na 0), archiv zacne novou "epochu", takze
+  se historie stare hry neprepise.
