@@ -117,18 +117,19 @@
                     var hlasenia = dom.getElementsByTagName('tr');
                     var arrHlasenia = Array.from(hlasenia);
                     arrHlasenia.forEach((x,index)=>{
-                        var pos=x.innerText.search(MenoZemky);
-                        if(pos!=-1)
-                        {
-                        }
-                        if(pos!=-1)
-                        {
-                            x.removeChild(x.childNodes[1]);
-                            x.removeChild(x.childNodes[8]);
-                            x.removeChild(x.childNodes[4]);
-                            document.body.appendChild(x);
-                            document.body.appendChild(arrHlasenia[index+1]);
-                        }
+                        try {
+                            var pos=x.innerText.search(MenoZemky);
+                            if(pos!=-1)
+                            {
+                                // uzly nemusi existovat (jiny format radku) - osetrit
+                                if(x.childNodes[1]) x.removeChild(x.childNodes[1]);
+                                if(x.childNodes[8]) x.removeChild(x.childNodes[8]);
+                                if(x.childNodes[4]) x.removeChild(x.childNodes[4]);
+                                document.body.appendChild(x);
+                                // posledni radek nema naslednika -> nepridavat undefined
+                                if(arrHlasenia[index+1]) document.body.appendChild(arrHlasenia[index+1]);
+                            }
+                        } catch (e) { /* neocekavany format radku hlaseni - preskocit */ }
                     })
                 }
 
