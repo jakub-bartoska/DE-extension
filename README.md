@@ -50,14 +50,15 @@ Po instalaci se na mape vedle ikonek (aktualizace mapy, hromadne kouzleni) objev
 
 <img width="290" height="54" alt="nova ikona" src="https://github.com/user-attachments/assets/e2356c53-8088-464f-9962-526e27f10b19" />
 
-Po kliknuti a vyberu typu (Porodnost / Zlato / Mana) rozsireni obarvi zeme na mape podle toho,
-jak na ne prosla kouzla — vychazi z **hlaseni tebe a tvych spoluhracu**:
+Po kliknuti a vyberu typu (Porodnost / Zlato / Mana) rozsireni **vybarvi cele uzemi** kazde
+zeme podle toho, jak na ne prosla kouzla — vychazi z **hlaseni tebe a tvych spoluhracu**.
+Vyplna lezi POD ikonami (vlajky, vojsko, stavby), takze ty zustanou dobre videt.
 
 - **Tve zeme a zeme spoluhracu** se obarvi vzdy spravne (porodnost znas presne).
 - **Neutralky a nepratele** se obarvi jen podle kouzel, ktera videli tvoji lide. Jestli tam
   kouzlil i souper, nevis — proto barva **nemusi sedet na 100 %**.
 
-**Barva kolecka:**
+**Barva vyplne:**
 
 | barva   | vyznam                                        |
 |---------|-----------------------------------------------|
@@ -66,9 +67,9 @@ jak na ne prosla kouzla — vychazi z **hlaseni tebe a tvych spoluhracu**:
 | zluta   | na zem sla 1x Nespokojenost                   |
 | cervena | 50 % porodnost, nebo na zem sla 2x Nespokojenost |
 
-**Okraj kolecka:**
+**Obrys zeme:**
 
-| okraj  | vyznam                                              |
+| obrys  | vyznam                                              |
 |--------|-----------------------------------------------------|
 | zeleny | zobrazeni je na 100 % spravne                       |
 | zluty  | realna porodnost se muze lisit kvuli akcim soupere  |
@@ -127,3 +128,31 @@ Jakmile prijde dalsi prepocet, predchozi stav je nenavratne prepsany. Proto k ro
   rozsireni k nemu nepotrebuje zadne heslo.
 - Kdyz liga dohraje a restartuje se (den spadne zpet na 0), archiv zacne novou "epochu", takze
   se historie stare hry neprepise.
+
+---
+
+# Funkce 3: Vybarveni celych zemi
+
+Rozsireni umi obarvit **cele uzemi** zeme (ne jen kolecko u vlajky). Vyplna lezi pod ikonami
+hrace, takze vlajky, vojsko a stavby zustavaji dobre videt.
+
+## Ovladani
+
+Na mape pribyde v horni liste **druha ikona**. Po kliknuti se otevre panel:
+
+- **Obarvit uzemi podle: Hracu / Aliancí / Nic** — obarvi kazdou zemi barvou jejiho vlastnika
+  (kazdy hrac jina barva), nebo podle aliance (spojenci stejna barva). Na prvni pohled je videt,
+  kdo co ovlada.
+- **Zvyraznit hranice** — obtahne kazdou zemi cerne, at jsou hranice jasne videt.
+
+Toto obarvovani pouziva i **Funkce 1** (kouzla) — misto puvodnich kolecek vyplni celou zem.
+
+## Jak to funguje "pod kapotou"
+
+Tvary vsech ~431 zemi jsou **predpocitane** (v souboru `regions.json`). Vznikly jednou z ciste
+stare grafiky mapy (flood-fill ohraniceny hranicemi + vyplneni vnitrnich kreseb). Za behu se nic
+nepocita — jen se polozi pres mapu prusvitná SVG vrstva a nastavi se `fill` u prislusneho tvaru.
+Diky tomu je to okamzite a **nezatezuje prohlizec**.
+
+Hranice zemi jsou v stare i nove grafice na stejnych pixelech, takze vyplne sedi **at hrajes s
+jakoukoli grafikou**.

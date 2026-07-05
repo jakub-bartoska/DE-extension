@@ -77,7 +77,9 @@
             input.value = optionText;
 
             input.addEventListener("change", () => {
-                document.querySelectorAll(".indicator").forEach(el => el.remove());
+                if (window.DEfill) {
+                    window.DEfill.ready().then(() => window.DEfill.clearAll());
+                }
                 if (input.value !== "Nic") {
                     displaySpellResults(input.value);
                 }
@@ -226,25 +228,13 @@
         )];
     }
 
+    // Obarví celé území země (výplň pod ikonami). Dřív se kreslilo kolečko kolem
+    // vlajky; teď se přes map-fill.js vyplní celý polygon země. Barva okraje
+    // (jistota odhadu) se použije jako obrys země.
     function addBackground(land, color, borderColor) {
-        let landStyle = window.getComputedStyle(land);
-        let top = parseFloat(landStyle.top);
-        let left = parseFloat(landStyle.left);
-
-        let newDiv = document.createElement("div");
-        newDiv.classList.add('indicator');
-        newDiv.style.zIndex = '1';
-        newDiv.style.pointerEvents = '1';
-        newDiv.style.top = (top - 11) + 'px';
-        newDiv.style.left = (left - 11) + 'px';
-        newDiv.style.backgroundColor = color;
-        newDiv.style.position = 'absolute';
-        newDiv.style.width = '60px';
-        newDiv.style.height = '60px';
-        newDiv.style.borderRadius = '50%';
-        newDiv.style.border = '2px solid ' + borderColor;
-
-        land.parentNode.insertBefore(newDiv, land);
+        if (!window.DEfill) return;
+        const id = land.getAttribute("data-id");
+        window.DEfill.ready().then(() => window.DEfill.fill(id, color, { stroke: borderColor }));
     }
 
     function getAttributeByType(type) {

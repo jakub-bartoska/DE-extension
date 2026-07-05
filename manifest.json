@@ -8,6 +8,7 @@
         "https://www.darkelf.cz/*"
       ],
       "js": [
+        "map-fill.js",
         "spell-results.js",
         "old-scripts.js",
         "map-history.js"
@@ -22,7 +23,8 @@
   "web_accessible_resources": [
     {
       "resources": [
-        "images/menu-icon.png"
+        "images/menu-icon.png",
+        "regions.json"
       ],
       "matches": [
         "https://www.darkelf.cz/*"
