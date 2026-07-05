@@ -163,14 +163,24 @@
         else if (h < 300)[r, g, b] = [x, 0, c]; else[r, g, b] = [c, 0, x];
         return [Math.round((r + m) * 255), Math.round((g + m) * 255), Math.round((b + m) * 255)];
     }
-    // sada dobře odlišených barev pro náhradu při kolizi
+    // Kurátorovaná paleta jasně odlišných barev pro náhradu, seřazená tak, aby
+    // libovolná podmnožina byla dobře rozlišitelná (bez zelené — pletla by se
+    // s mapou). Náhrady se berou v pořadí → klasické kategoriální barvy.
+    const PALETTE = [
+        [230, 25, 75], [67, 99, 216], [245, 130, 49], [145, 30, 180],
+        [66, 212, 244], [240, 50, 230], [255, 225, 25], [170, 110, 40],
+        [128, 0, 0], [0, 0, 128], [250, 130, 180], [128, 128, 0],
+        [70, 240, 240], [230, 130, 255], [255, 170, 130], [100, 100, 100],
+    ];
+    // záložní jemná paleta (kdyby kurátorovaná došla) — hue kruh × více jasů
     const DISTINCT = (() => {
-        const out = [];
-        for (const [s, l] of [[72, 50], [82, 42], [62, 60], [85, 34]])
+        const out = PALETTE.slice();
+        for (const [s, l] of [[72, 50], [82, 42], [62, 60]])
             for (let h = 0; h < 360; h += 30) out.push(hsl2rgb(h, s, l));
         return out;
     })();
     const COLLISION_THRESHOLD = 26; // ΔE — pod tím jsou barvy "moc podobné"
+    const FALLBACK_SEP = 40;        // náhradní barvu chceme JASNĚ odlišnou (ne jen práh)
     const FILL_OP = 0.65;           // průhlednost výplně
     const GRASS = [0, 132, 0];      // barva trávy (přes ni se výplň míchá)
     // Lab výsledné barvy tak, jak reálně vypadá na mapě (výplň přes trávu) —
@@ -212,13 +222,19 @@
         for (const gr of list) {
             let color = gr.base;
             if (!color || minDE(onGrass(color), assignedLab) < COLLISION_THRESHOLD) {
-                // vyber z palety barvu, jejíž výsledek na mapě je nejvzdálenější
-                let best = null, bestD = -1;
-                for (const cand of DISTINCT) {
-                    const dd = minDE(onGrass(cand), assignedLab);
-                    if (dd > bestD) { bestD = dd; best = cand; }
+                // náhrada: první barva z palety JASNĚ odlišná (≥ FALLBACK_SEP) od
+                // všeho použitého i od trávy; jinak aspoň nad prahem; jinak úplně
+                // nejvzdálenější. Pořadí palety zajistí klasické rozlišitelné barvy.
+                color = PALETTE.find((c) => minDE(onGrass(c), assignedLab) >= FALLBACK_SEP)
+                    || PALETTE.find((c) => minDE(onGrass(c), assignedLab) >= COLLISION_THRESHOLD);
+                if (!color) {
+                    let best = null, bestD = -1;
+                    for (const cand of DISTINCT) {
+                        const dd = minDE(onGrass(cand), assignedLab);
+                        if (dd > bestD) { bestD = dd; best = cand; }
+                    }
+                    color = best;
                 }
-                color = best;
             }
             assignedLab.push(onGrass(color));
             const css = `rgb(${color[0]},${color[1]},${color[2]})`;
