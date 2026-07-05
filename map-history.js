@@ -241,15 +241,22 @@
             setAttr(el, "data-alliance", z.aliance);
         });
 
-        // krypty/hrdinové (divy s id "h<číslo>") — nahradit vrstvu za historickou
-        const staré = [...maps.querySelectorAll("div[id]")].filter((d) => /^h\d+$/.test(d.id));
-        const rodič = staré.length ? staré[0].parentNode : maps;
-        staré.forEach((d) => d.remove());
-        if (snap.krypty && snap.krypty.length) {
+        // Krypty/hrdinové (divy s id "h<číslo>"): odstranit současné a vložit
+        // historické. Pozici h-divu určuje CSS pravidlo #h<id> (top/left) a je
+        // position:absolute RELATIVNÍ ke své buňce mapy (position_xN_yN). Proto
+        // MUSÍ jít každý do buňky své země (stejné jako land x<id>) — jinak by
+        // se umístil úplně jinam (do jiné buňky).
+        [...maps.querySelectorAll("div[id]")]
+            .filter((d) => /^h\d+$/.test(d.id))
+            .forEach((d) => d.remove());
+        (snap.krypty || []).forEach((k) => {
             const holder = document.createElement("div");
-            holder.innerHTML = snap.krypty.map((k) => k.html).join("");
-            Array.from(holder.childNodes).forEach((n) => rodič.appendChild(n));
-        }
+            holder.innerHTML = k.html;
+            const el = holder.firstElementChild;
+            if (!el) return;
+            const land = document.getElementById("x" + el.id.slice(1));
+            (land ? land.parentNode : maps).appendChild(el);
+        });
     }
 
     function restoreLive() {
