@@ -156,9 +156,11 @@ majitele, prebarvi se podle toho, komu patrila v dany den.
 ## Jak to funguje "pod kapotou"
 
 Tvary vsech ~431 zemi jsou **predpocitane** (v souboru `regions.json`). Vznikly jednou z ciste
-stare grafiky mapy (flood-fill ohraniceny hranicemi + vyplneni vnitrnich kreseb). Za behu se nic
-nepocita — jen se polozi pres mapu prusvitná SVG vrstva a nastavi se `fill` u prislusneho tvaru.
-Diky tomu je to okamzite a **nezatezuje prohlizec**.
+stare grafiky mapy metodou **watershed** — kazdy bod souse i vnitrni jezera se priradi nejblizsi
+zemi, ohraniceno nakreslenymi hranicemi; more (voda napojena na okraj mapy) se vynecha. Diky tomu
+vypln dosahuje az k hranicim (zadne neobarvene pruhy) a pokryva i jezera uvnitr zemi. Za behu se
+nic nepocita — jen se polozi pres mapu prusvitná SVG vrstva a nastavi se `fill` u prislusneho
+tvaru. Diky tomu je to okamzite a **nezatezuje prohlizec**.
 
 Hranice zemi jsou v stare i nove grafice na stejnych pixelech, takze vyplne sedi **at hrajes s
 jakoukoli grafikou**.
