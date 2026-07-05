@@ -11,9 +11,47 @@
 
 (function() {
     'use strict';
-    magickeHlaseniaPreZemku();
-    moNeutralky();
-    odhadVHlaseniach();
+    // Kazdou funkci volame samostatne s osetrenim chyb, aby chyba v jedne
+    // neshodila zbyle (a nezobrazovala se v prehledu chyb rozsireni).
+    try { magickeHlaseniaPreZemku(); } catch (e) { console.warn("DE magickeHlasenia:", e); }
+    try { moNeutralky(); } catch (e) { console.warn("DE moNeutralky:", e); }
+    try { odhadVHlaseniach(); } catch (e) { console.warn("DE odhadVHlaseniach:", e); }
+
+    // Herni den robustne: cte se z ramu "Lista_Horni" (horni lista, den je v
+    // jedinem spanu). Frameset se v minulosti zmenil - drive byl den v ramu
+    // "mapa", ktery uz zadny span nema, proto stary kod padal. Kdyz den nejde
+    // zjistit, vracime null a volajici funkce se korektne preskoci.
+    function getGameDay() {
+        try {
+            var frames = (window.parent && window.parent.frames) || null;
+            if (!frames) {
+                return null;
+            }
+            var lh = frames["Lista_Horni"];
+            if (lh && lh.document) {
+                var span = lh.document.getElementsByTagName("span")[0];
+                if (span) {
+                    var n = parseInt(span.textContent, 10);
+                    if (!isNaN(n)) {
+                        return n;
+                    }
+                }
+            }
+            // zaloha: projdi ramy a zkus najit "herni den N" (napr. v #info_text)
+            for (var i = 0; i < frames.length; i++) {
+                try {
+                    var info = frames[i].document.getElementById("info_text");
+                    if (info) {
+                        var m = info.textContent.match(/den\s*(\d+)/i);
+                        if (m) {
+                            return parseInt(m[1], 10);
+                        }
+                    }
+                } catch (e) { /* cizi origin nebo neexistuje - preskocit */ }
+            }
+        } catch (e) { /* frameset neni dostupny */ }
+        return null;
+    }
 
     function magickeHlaseniaPreZemku()
     {
@@ -127,10 +165,10 @@
             bonus = parseInt(s);
             break;
         }
-        var denElement = parent.frames.mapa.document.getElementsByTagName('span')[0].innerHTML;
-        pos = denElement.search("&");
-        var denString = denElement.substring(pos+15, pos+19);
-        var den = parseInt(denString);
+        var den = getGameDay();
+        if (den === null || isNaN(den)) {
+            return; // herni den se nepodarilo zjistit - radeji nic nekreslime, nez spadnout
+        }
         // calculate
         var MO = calulateMO(vojsko, obrana, bonus, den);
         //insert into document
