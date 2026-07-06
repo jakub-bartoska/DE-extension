@@ -363,29 +363,10 @@
 
     // ------------------------------------------------------------- UI
     //
-    // Panel je v Shadow DOM na <section> hostu. Mapa má agresivní CSS pravidlo,
-    // které dělá KAŽDÝ <div> velikost 39×39 px — kdyby byl panel běžný div v
-    // stránce, scvrknul by se. Shadow DOM izoluje obsah od CSS stránky a host
-    // není div, takže ho pravidlo `div{}` nechytí.
+    // Ovládací panel staví sdílený UI kit (window.DEui) do Shadow DOM — jednotný
+    // vzhled se zbytkem rozšíření a izolace od herního CSS (pravidlo `div{}`).
 
-    const PANEL_CSS = `
-        .panel { box-sizing:border-box; display:flex; flex-direction:column; gap:9px;
-            width:max-content; padding:9px 11px; border:3px solid #220000;
-            border-top-color:#521000; border-radius:4px; background:#400000;
-            color:#e8d8b8; font:13px Arial,sans-serif; white-space:nowrap;
-            box-shadow:0 3px 8px rgba(0,0,0,.5); }
-        .title { font-weight:bold; text-align:center; }
-        .row { display:flex; gap:5px; }
-        .chip { cursor:pointer; border:1px solid #7a3030; border-radius:3px;
-            font:bold 12px Arial,sans-serif; padding:3px 10px; line-height:16px;
-            background:#5a1414; color:#e8c8a8; }
-        .chip:hover { background:#6e1a1a; }
-        .chip.active { background:#9a3018; border-color:#d68040; color:#fff2d8; }
-        .hr { height:1px; background:#7a3030; }
-        .bchip { align-self:flex-start; }
-    `;
-
-    // až po definici PANEL_CSS (const nelze použít před svým řádkem)
+    let panelApi = null;
     const menu = document.getElementById("miniMenuContainer");
     if (menu) buildMenu();
 
@@ -403,67 +384,27 @@
     }
 
     function buildPanel() {
-        const host = document.createElement("section"); // NE div (mapa div mangluje)
-        host.id = "de-fill-host";
-        Object.assign(host.style, { position: "fixed", zIndex: "99999", display: "none" });
-        document.body.appendChild(host);
-        const sh = host.attachShadow({ mode: "open" });
-        const style = document.createElement("style");
-        style.textContent = PANEL_CSS;
-        sh.appendChild(style);
-
-        const panel = document.createElement("div");
-        panel.className = "panel";
-
-        const title = document.createElement("div");
-        title.className = "title";
-        title.textContent = "Obarvit území podle:";
-        panel.appendChild(title);
-
-        const row = document.createElement("div");
-        row.className = "row";
-        const chips = {};
-        [["hrac", "Hráčů"], ["aliance", "Aliancí"], ["", "Vypnout"]].forEach(([val, label]) => {
-            const c = document.createElement("button");
-            c.type = "button"; c.className = "chip"; c.textContent = label;
-            if (val === "") c.classList.add("active");
-            chips[val] = c;
-            c.addEventListener("click", () => {
-                for (const k in chips) chips[k].classList.toggle("active", k === val);
-                colorByOwner(val || null);
-            });
-            row.appendChild(c);
-        });
-        panel.appendChild(row);
-
-        const hr = document.createElement("div");
-        hr.className = "hr";
-        panel.appendChild(hr);
-
-        let bOn = false;
-        const bchip = document.createElement("button");
-        bchip.type = "button"; bchip.className = "chip bchip";
-        bchip.textContent = "Zvýraznit hranice";
-        bchip.addEventListener("click", async () => {
-            bOn = !bOn;
-            bchip.classList.toggle("active", bOn);
+        panelApi = DEui.createPanel({ position: { display: "none" } });
+        panelApi.panel.appendChild(DEui.title("Obarvit území podle"));
+        const seg = DEui.segmented(
+            [["hrac", "Hráčů"], ["aliance", "Aliancí"], ["", "Vypnout"]],
+            (val) => colorByOwner(val || null), "");
+        panelApi.panel.appendChild(seg.el);
+        panelApi.panel.appendChild(DEui.hr());
+        const bTog = DEui.toggle("Zvýraznit hranice", async (on) => {
             await ready();
-            setBorders(bOn);
-        });
-        panel.appendChild(bchip);
-
-        sh.appendChild(panel);
+            setBorders(on);
+        }, false);
+        panelApi.panel.appendChild(bTog.el);
     }
 
     function togglePanel() {
-        const host = document.getElementById("de-fill-host");
-        if (host.style.display === "none") {
+        if (!panelApi) return;
+        if (!panelApi.isOpen()) {
             const r = document.getElementById("de-fill-button").getBoundingClientRect();
-            host.style.left = Math.round(r.left) + "px";
-            host.style.top = Math.round(r.bottom + 5) + "px";
-            host.style.display = "block";
-        } else {
-            host.style.display = "none";
+            panelApi.host.style.left = Math.round(r.left) + "px";
+            panelApi.host.style.top = Math.round(r.bottom + 5) + "px";
         }
+        panelApi.toggle();
     }
 })();

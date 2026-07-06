@@ -44,72 +44,41 @@
     loadSnapshots();
 
     // ---------------------------------------------------------------- UI
-
-    function mkBtn(text) {
-        const b = document.createElement("button");
-        b.textContent = text;
-        Object.assign(b.style, {
-            cursor: "pointer", background: "#601010", color: "#f0e0c0",
-            border: "1px solid #a05028", borderRadius: "3px",
-            font: "bold 13px Arial, sans-serif", padding: "2px 8px", lineHeight: "18px",
-        });
-        b.onmouseenter = () => (b.style.background = "#803018");
-        b.onmouseleave = () => (b.style.background = "#601010");
-        return b;
-    }
+    //
+    // Panel staví sdílený UI kit (window.DEui) — jednotný vzhled se zbytkem
+    // rozšíření. Vlevo nahoře… ne, vpravo nahoře, v Shadow DOM hostu.
 
     function buildPanel() {
-        const panel = document.createElement("div");
-        panel.id = "de-history-panel";
-        Object.assign(panel.style, {
-            position: "fixed", top: "8px", right: "8px", left: "auto", zIndex: "9999",
-            width: "max-content", whiteSpace: "nowrap", boxSizing: "border-box",
-            display: "flex", alignItems: "center", gap: "6px",
-            background: "#400000", border: "3px solid #220000", borderTopColor: "#521000",
-            borderRadius: "4px", padding: "5px 7px", color: "#e8d8b8",
-            font: "12px Arial, sans-serif", boxShadow: "0 2px 6px rgba(0,0,0,0.5)",
-            userSelect: "none",
-        });
+        const api = DEui.createPanel({ position: { top: "8px", right: "8px", left: "auto" } });
+        api.show();
 
-        const title = document.createElement("span");
-        title.textContent = "Historie:";
-        title.style.fontWeight = "bold";
+        api.panel.appendChild(DEui.title("Historie mapy"));
 
         // rozbalovátko věku (epochy) — skryté, dokud nevíme, že jich je víc
-        vekSelect = document.createElement("select");
-        vekSelect.id = "de-history-vek";
-        Object.assign(vekSelect.style, {
-            display: "none", cursor: "pointer", background: "#601010", color: "#f0e0c0",
-            border: "1px solid #a05028", borderRadius: "3px",
-            font: "bold 12px Arial, sans-serif", padding: "1px 2px",
-        });
-        vekSelect.onchange = () => {
-            zvolenyVek = Number(vekSelect.value);
+        vekSelect = DEui.select((v) => {
+            zvolenyVek = Number(v);
             naplnSnimkyVeku();
             show();
-        };
+        });
+        vekSelect.id = "de-history-vek";
+        vekSelect.style.display = "none";
 
-        prevBtn = mkBtn("◀");
-        nextBtn = mkBtn("▶");
-        const dnesBtn = mkBtn("Dnes");
-
-        label = document.createElement("span");
-        label.id = "de-history-label";
-        label.textContent = "…";
-        Object.assign(label.style, { minWidth: "92px", textAlign: "center" });
-
-        prevBtn.onclick = () => { if (idx > 0) { idx--; show(); } };
-        nextBtn.onclick = () => { if (idx < maxIdx()) { idx++; show(); } };
-        dnesBtn.onclick = () => {
+        prevBtn = DEui.button("◀", () => { if (idx > 0) { idx--; show(); } });
+        nextBtn = DEui.button("▶", () => { if (idx < maxIdx()) { idx++; show(); } });
+        const dnesBtn = DEui.button("Dnes", () => {
             zvolenyVek = aktualniVek;
             if (vekSelect) vekSelect.value = String(aktualniVek);
             naplnSnimkyVeku();
             idx = snimky.length; // živá mapa
             show();
-        };
+        }, { accent: true });
 
-        panel.append(title, vekSelect, prevBtn, label, nextBtn, dnesBtn);
-        document.body.appendChild(panel);
+        label = document.createElement("span");
+        label.className = "de-label";
+        label.id = "de-history-label";
+        label.textContent = "…";
+
+        api.panel.appendChild(DEui.row(vekSelect, prevBtn, label, nextBtn, dnesBtn));
         setBusy(true);
     }
 

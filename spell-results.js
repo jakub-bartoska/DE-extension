@@ -10,22 +10,21 @@
     let slightlyNegativeColor = 'rgba(255, 255, 0, 0.4)';
     let negativeColor = 'rgba(255, 0, 0, 0.4)';
 
+    let panelApi = null;
+
     function addMenuButtons() {
         let menu = document.getElementById("miniMenuContainer");
         if (!menu) {
             return;
         }
-        let base = createMenuItem("base");
-        var dropDown = createDropdown();
-        menu.appendChild(base);
-        menu.appendChild(dropDown);
+        menu.appendChild(createMenuItem());
+        buildPanel();
     }
 
     function createMenuItem() {
         let img = document.createElement("img");
         img.src = "../images/mapy/but_map_menu.gif";
         img.className = "miniMenuItem cursorHand";
-        img.id = "displaySpellResults"
         img.width = 47;
         img.height = 38;
         img.id = "natality-button";
@@ -35,62 +34,32 @@
         return img;
     }
 
-    function displayDropdown() {
-        let dropdown = document.getElementById("display-results-dropdown");
-        let isHidden = window.getComputedStyle(dropdown).display === "none";
-        if (isHidden) {
-            dropdown.style.display = "block";
-        } else {
-            dropdown.style.display = "none";
-        }
-    }
-
-    function createDropdown() {
-        let div = document.createElement("div");
-        div.id = "display-results-dropdown";
-        div.style.display = "none";
-        div.style.padding = "0px 8px 10px 8px";
-        div.style.left = "220px";
-        div.style.top = "46px";
-        div.style.position = "absolute";
-        div.style.zIndex = "50";
-        div.style.height = "auto";
-        div.style.width = "190px";
-        div.style.maxWidth = "210px";
-        div.style.border = "4px solid #220000";
-        div.style.backgroundColor = "#400000";
-        div.style.borderTopColor = "#521000";
-        div.style.borderRightColor = " #521000";
-        div.style.backgroundImage = "../images/pozadi/poz_drv.jpg";
-
-        const options = ["Porodnost", "Zlato", "Mana", "Nic"];
-
-        options.forEach(optionText => {
-            const label = document.createElement("label");
-            label.style.display = "block";
-            label.style.textAlign = "left";
-            label.style.cursor = "pointer";
-
-            const input = document.createElement("input");
-            input.type = "radio";
-            input.name = "results-display";
-            input.value = optionText;
-
-            input.addEventListener("change", () => {
+    // Panel staví sdílený UI kit (window.DEui) do Shadow DOM — jednotný vzhled
+    // se zbytkem rozšíření a izolace od herního CSS.
+    function buildPanel() {
+        panelApi = DEui.createPanel({ position: { display: "none" } });
+        panelApi.panel.appendChild(DEui.title("Obarvit dle kouzel"));
+        const seg = DEui.segmented(
+            [["Porodnost", "Porodnost"], ["Zlato", "Zlato"], ["Mana", "Mana"], ["Nic", "Nic"]],
+            (val) => {
                 if (window.DEfill) {
                     window.DEfill.ready().then(() => window.DEfill.clearAll());
                 }
-                if (input.value !== "Nic") {
-                    displaySpellResults(input.value);
+                if (val !== "Nic") {
+                    displaySpellResults(val);
                 }
-            });
+            }, null);
+        panelApi.panel.appendChild(seg.el);
+    }
 
-            label.appendChild(input);
-            label.appendChild(document.createTextNode(" " + optionText));
-            div.appendChild(label);
-        });
-
-        return div;
+    function displayDropdown() {
+        if (!panelApi) return;
+        if (!panelApi.isOpen()) {
+            const r = document.getElementById("natality-button").getBoundingClientRect();
+            panelApi.host.style.left = Math.round(r.left) + "px";
+            panelApi.host.style.top = Math.round(r.bottom + 5) + "px";
+        }
+        panelApi.toggle();
     }
 
     function displaySpellResults(type) {

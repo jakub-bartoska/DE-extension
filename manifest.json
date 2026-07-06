@@ -8,6 +8,7 @@
         "https://www.darkelf.cz/*"
       ],
       "js": [
+        "ui-kit.js",
         "map-fill.js",
         "spell-results.js",
         "old-scripts.js",
