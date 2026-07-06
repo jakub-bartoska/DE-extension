@@ -91,7 +91,10 @@
 
     function setBorders(on) {
         bordersOn = on;
-        for (const id in polys) polys[id].style.stroke = on ? "rgba(0,0,0,0.75)" : "none";
+        for (const id in polys) {
+            polys[id].style.stroke = on ? "rgba(0,0,0,0.75)" : "none";
+            polys[id].style.strokeWidth = on ? "3" : "";   // tučnější obtažení; "" = zpět na atribut 1.4
+        }
     }
 
     // ------------------------------------------- pruhované (dvoubarevné) výplně
