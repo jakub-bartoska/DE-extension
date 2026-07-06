@@ -94,6 +94,65 @@
         for (const id in polys) polys[id].style.stroke = on ? "rgba(0,0,0,0.75)" : "none";
     }
 
+    // ------------------------------------------- pruhované (dvoubarevné) výplně
+    //
+    // Nově obsazená země se vykreslí šikmými pruhy: široký pruh = nový vlastník,
+    // úzký = starý (z historie). U získané neutrálky je úzký pruh průhledný
+    // (prosvítá mapa). Pruhy dělá SVG <pattern> — nativně dlaždicované, bez
+    // výkonové zátěže; průhlednost řeší fill-opacity polygonu (stejně jako plná
+    // výplň), takže barvy sedí s plným obarvením.
+    let defs = null;
+    const patternCache = {}; // "novaRGB|staraRGB" → id patternu
+    const STRIPE_W = 16;                         // šířka dlaždice pruhů (px)
+    const NEW_BAND = Math.round(STRIPE_W * 3 / 4); // nový pruh 3× širší než starý (3:1)
+
+    function rgbStr(c) { return `rgb(${c[0]},${c[1]},${c[2]})`; }
+
+    function stripePattern(newRgb, oldRgb) { // oldRgb null → úzké pruhy průhledné
+        const key = newRgb.join(",") + "|" + (oldRgb ? oldRgb.join(",") : "-");
+        if (patternCache[key]) return patternCache[key];
+        if (!defs) { defs = document.createElementNS(NS, "defs"); svg.insertBefore(defs, svg.firstChild); }
+        const id = "de-stripe-" + Object.keys(patternCache).length;
+        const p = document.createElementNS(NS, "pattern");
+        p.setAttribute("id", id);
+        p.setAttribute("patternUnits", "userSpaceOnUse");
+        p.setAttribute("width", STRIPE_W);
+        p.setAttribute("height", STRIPE_W);
+        p.setAttribute("patternTransform", "rotate(45)");
+        if (oldRgb) { // podklad = starý vlastník (celá dlaždice)
+            const r0 = document.createElementNS(NS, "rect");
+            r0.setAttribute("width", STRIPE_W); r0.setAttribute("height", STRIPE_W);
+            r0.setAttribute("fill", rgbStr(oldRgb));
+            p.appendChild(r0);
+        }
+        const r1 = document.createElementNS(NS, "rect"); // široký pruh = nový vlastník
+        r1.setAttribute("width", NEW_BAND); r1.setAttribute("height", STRIPE_W);
+        r1.setAttribute("fill", rgbStr(newRgb));
+        p.appendChild(r1);
+        defs.appendChild(p);
+        patternCache[key] = id;
+        return id;
+    }
+
+    function fillStriped(id, newRgb, oldRgb) {
+        const p = polys[id];
+        if (!p) return;
+        p.style.fill = `url(#${stripePattern(newRgb, oldRgb)})`;
+        p.style.fillOpacity = String(FILL_OP);
+        if (!bordersOn) p.style.stroke = "none";
+    }
+
+    // Načtení obrázku (vlajky/erbu) pro zjištění barvy starého vlastníka, který
+    // už na aktuální mapě není (jeho barva tedy není v colorCache).
+    function loadImg(src) {
+        return new Promise((res) => {
+            const im = new Image();
+            im.onload = () => res(im);
+            im.onerror = () => res(null);
+            im.src = src;
+        });
+    }
+
     // reapply: znovu obarví podle aktuálně zobrazených vlastníků (po přehození
     // času v historii — vlastníci zemí se změní, barvy se musí překreslit).
     window.DEfill = {
@@ -221,38 +280,84 @@
         for (const k in cache) assignedLab.push(onGrass(cache[k]));
 
         const entries = Object.entries(groups);
-        // už přiřazení (v cache) → jen vyplň uloženou barvou
-        for (const [key, g] of entries) {
-            if (!cache[key]) continue;
-            const c = cache[key];
-            for (const id of g.lands) fill(id, `rgb(${c[0]},${c[1]},${c[2]})`, { opacity: FILL_OP });
+
+        // vybere barvu: vlastní (base) když je použitelná a nekoliduje, jinak
+        // náhradu z palety JASNĚ odlišnou (≥ FALLBACK_SEP) od všeho už přiřazeného
+        // i od trávy; jinak aspoň nad prahem; jinak úplně nejvzdálenější.
+        function pickColor(base) {
+            if (base && minDE(onGrass(base), assignedLab) >= COLLISION_THRESHOLD) return base;
+            let color = PALETTE.find((c) => minDE(onGrass(c), assignedLab) >= FALLBACK_SEP)
+                || PALETTE.find((c) => minDE(onGrass(c), assignedLab) >= COLLISION_THRESHOLD);
+            if (!color) {
+                let best = null, bestD = -1;
+                for (const cand of DISTINCT) {
+                    const dd = minDE(onGrass(cand), assignedLab);
+                    if (dd > bestD) { bestD = dd; best = cand; }
+                }
+                color = best;
+            }
+            return color;
         }
-        // noví (bez cache) → přiřaď barvu, ulož do cache; ti s použitelnou vlastní
-        // barvou první (ať si ji nechají), pak podle velikosti.
+
+        // noví vlastníci (bez cache) → přiřaď a ulož barvu (zatím nevyplňuj); ti
+        // s použitelnou vlastní barvou první (ať si ji nechají), pak dle velikosti.
         const novi = entries.filter(([key]) => !cache[key])
             .map(([key, g]) => ({ key, lands: g.lands, base: dominantColor(g.img) }));
         novi.sort((a, b) => (usable(b.base) - usable(a.base)) || (b.lands.length - a.lands.length));
         for (const gr of novi) {
-            let color = gr.base;
-            if (!color || minDE(onGrass(color), assignedLab) < COLLISION_THRESHOLD) {
-                // náhrada: první barva z palety JASNĚ odlišná (≥ FALLBACK_SEP) od
-                // všeho použitého i od trávy; jinak aspoň nad prahem; jinak úplně
-                // nejvzdálenější. Pořadí palety zajistí klasické rozlišitelné barvy.
-                color = PALETTE.find((c) => minDE(onGrass(c), assignedLab) >= FALLBACK_SEP)
-                    || PALETTE.find((c) => minDE(onGrass(c), assignedLab) >= COLLISION_THRESHOLD);
-                if (!color) {
-                    let best = null, bestD = -1;
-                    for (const cand of DISTINCT) {
-                        const dd = minDE(onGrass(cand), assignedLab);
-                        if (dd > bestD) { bestD = dd; best = cand; }
-                    }
-                    color = best;
-                }
-            }
+            const color = pickColor(gr.base);
             cache[gr.key] = color;
             assignedLab.push(onGrass(color));
-            const css = `rgb(${color[0]},${color[1]},${color[2]})`;
-            for (const id of gr.lands) fill(id, css, { opacity: FILL_OP });
+        }
+
+        // Vlastníci z PŘEDCHOZÍHO herního dne → pruhy u nově obsazených zemí.
+        let prev = null;
+        try { prev = window.DEhistory && await window.DEhistory.prevDayOwners(); }
+        catch (e) { prev = null; }
+
+        // Doplnit barvy starých vlastníků, kteří na aktuální mapě nejsou (barva
+        // není v cache) — vytáhnout z jejich vlajky/erbu v historickém HTML.
+        if (prev) {
+            const needHtml = {}; // oldKey → html snímku s jeho vlajkou/erbem
+            for (const [key, g] of entries) for (const id of g.lands) {
+                const po = prev[id];
+                if (!po) continue;
+                const oldKey = String((isAli ? po.aliance_id : po.hrac_id) || "");
+                if (!oldKey || oldKey === "0" || oldKey === key || cache[oldKey]) continue;
+                if (!(oldKey in needHtml)) needHtml[oldKey] = po.html || "";
+            }
+            for (const oldKey in needHtml) {
+                const tmp = document.createElement("div");
+                tmp.innerHTML = needHtml[oldKey];
+                const im0 = isAli ? tmp.querySelector("img[src*='/e/']") : tmp.querySelector("img");
+                let color = null;
+                if (im0 && im0.getAttribute("src")) {
+                    const img = await loadImg(im0.getAttribute("src"));
+                    if (img) color = pickColor(dominantColor(img));
+                }
+                if (!color) color = pickColor(null);
+                cache[oldKey] = color;
+                assignedLab.push(onGrass(color));
+            }
+        }
+
+        // Vyplnit: nově obsazené země pruhovaně (široký pruh nový vlastník, úzký
+        // starý / průhledný u neutrálky), ostatní plnou barvou.
+        for (const [key, g] of entries) {
+            const cur = cache[key];
+            if (!cur) continue;
+            for (const id of g.lands) {
+                let striped = false;
+                if (prev && prev[id]) {
+                    const oldKey = String((isAli ? prev[id].aliance_id : prev[id].hrac_id) || "");
+                    if (oldKey !== key) { // vlastník se oproti předchozímu dni změnil
+                        const neutralOld = !oldKey || oldKey === "0";
+                        fillStriped(id, cur, neutralOld ? null : (cache[oldKey] || null));
+                        striped = true;
+                    }
+                }
+                if (!striped) fill(id, rgbStr(cur), { opacity: FILL_OP });
+            }
         }
     }
 

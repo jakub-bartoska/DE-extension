@@ -132,6 +132,43 @@
         return r.json();
     }
 
+    // Snímek konkrétního dne (dle jeho `snap` klíče), memoizovaně — používá ho
+    // jak přehazování času, tak porovnání s předchozím dnem (pruhované obarvení).
+    const snapCache = {};
+    function fetchSnap(snapKey) {
+        if (!(snapKey in snapCache))
+            snapCache[snapKey] = apiGet(
+                "/stav/" + encodeURIComponent(liga) + "?snap=" + encodeURIComponent(snapKey));
+        return snapCache[snapKey];
+    }
+
+    // Herní den právě zobrazené mapy (živá = dnešní den).
+    function displayedDen() {
+        if (zvolenyVek === aktualniVek && idx >= snimky.length) return dnesniDen;
+        return snimky[idx] ? Number(snimky[idx].den) : null;
+    }
+
+    // Vlastníci všech zemí v herním dni TĚSNĚ PŘED právě zobrazeným (ve stejné
+    // epoše). Vrací { landId: zemeZáznam } nebo null, když předchozí den není.
+    // Slouží map-fill.js k pruhovanému obarvení nově obsazených zemí.
+    async function prevDayOwners() {
+        const curDen = displayedDen();
+        if (curDen == null) return null;
+        let prev = null;
+        for (const s of snimky) {
+            const d = Number(s.den);
+            if (d < curDen && (!prev || d > Number(prev.den))) prev = s;
+        }
+        if (!prev) return null;
+        let snap;
+        try { snap = await fetchSnap(prev.snap); } catch (e) { return null; }
+        const m = {};
+        (snap.zeme || []).forEach((z) => { m[String(z.id)] = z; });
+        return m;
+    }
+
+    window.DEhistory = { prevDayOwners };
+
     async function loadSnapshots() {
         try {
             prehled = await apiGet("/stav/" + encodeURIComponent(liga));
@@ -166,6 +203,9 @@
         idx = snimky.length; // start na „Dnes"
         setBusy(false);
         updateLabel();
+        // data máme → pokud už běží obarvení, překreslit (teď umí i pruhy nově
+        // obsazených zemí, na které byla dřív potřeba historie).
+        reapplyFill();
     }
 
     function naplnSnimkyVeku() {
@@ -200,9 +240,7 @@
         updateLabel(" …");
         setBusy(true);
         try {
-            const snap = await apiGet(
-                "/stav/" + encodeURIComponent(liga) + "?snap=" + encodeURIComponent(snimky[idx].snap)
-            );
+            const snap = await fetchSnap(snimky[idx].snap);
             applySnapshot(snap);
             reapplyFill();
             updateLabel();
