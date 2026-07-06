@@ -26,11 +26,28 @@
     // ------------------------------------------------------------- vrstva
 
     function gridOrigin() {
-        // buňka x1_y1 vůči #maps (mapa má nahoře offset hlavičky ~51 px)
+        // Buňka x1_y1 v CONTENT souřadnicích #maps. #maps je scroll-kontejner
+        // (overflow:auto); SVG vrstva je jeho absolutně pozicované dítě a scrolluje
+        // s obsahem, takže potřebujeme content pozici = (rect diff) + scroll.
+        // Bez scrollu byla vrstva posunutá přesně o scrollTop (offset „nahoru").
         const cell = maps.querySelector("#position_x1_y1");
         const mr = maps.getBoundingClientRect();
         const cr = cell.getBoundingClientRect();
-        return { x: Math.round(cr.left - mr.left), y: Math.round(cr.top - mr.top) };
+        return {
+            x: Math.round(cr.left - mr.left + maps.scrollLeft),
+            y: Math.round(cr.top - mr.top + maps.scrollTop),
+        };
+    }
+
+    // Přepočítá umístění vrstvy vůči gridu. gridOrigin je zachycen jednou při
+    // buildLayer, ale layout se po doložení obrázků nad mřížkou posune → vrstva
+    // by zůstala offsetnutá (posunuté obarvení). syncPos() to srovná; voláme po
+    // load/resize/scrollu a při reapply.
+    function syncPos() {
+        if (!svg) return;
+        const o = gridOrigin();
+        if (svg.style.left !== o.x + "px") svg.style.left = o.x + "px";
+        if (svg.style.top !== o.y + "px") svg.style.top = o.y + "px";
     }
 
     function ready() {
@@ -65,6 +82,18 @@
             svg.appendChild(pg);
         }
         maps.appendChild(svg);
+
+        // srovnat pozici po doložení layoutu (obrázky nad mřížkou posunou grid)
+        syncPos();
+        requestAnimationFrame(syncPos);
+        [150, 500, 1200, 3000].forEach((t) => setTimeout(syncPos, t));
+        if (document.readyState !== "complete") window.addEventListener("load", syncPos, { once: true });
+        try { new ResizeObserver(syncPos).observe(maps); } catch (e) {}
+        // scroll mapy (okno frame i případný vnitřní scroll) → přepočítat
+        let raf = 0;
+        const onScroll = () => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; syncPos(); }); };
+        window.addEventListener("scroll", onScroll, { passive: true, capture: true });
+        maps.addEventListener("scroll", onScroll, { passive: true });
     }
 
     // ------------------------------------------------------------- API
@@ -255,6 +284,7 @@
     async function colorByOwner(mode) { // "hrac" | "aliance" | null
         activeMode = mode;
         await ready();
+        syncPos();      // srovnat vrstvu s mřížkou (layout se mohl posunout)
         clearAll();
         if (!mode) return;
 
