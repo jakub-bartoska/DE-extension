@@ -49,13 +49,13 @@
     // rozšíření. Vlevo nahoře… ne, vpravo nahoře, v Shadow DOM hostu.
 
     function buildPanel() {
-        const api = DEui.createPanel({ position: { top: "8px", right: "8px", left: "auto" } });
+        const api = window.DEui.createPanel({ position: { top: "8px", right: "8px", left: "auto" } });
         api.show();
 
-        api.panel.appendChild(DEui.title("Historie mapy"));
+        api.panel.appendChild(window.DEui.title("Historie mapy"));
 
         // rozbalovátko věku (epochy) — skryté, dokud nevíme, že jich je víc
-        vekSelect = DEui.select((v) => {
+        vekSelect = window.DEui.select((v) => {
             zvolenyVek = Number(v);
             naplnSnimkyVeku();
             show();
@@ -63,9 +63,9 @@
         vekSelect.id = "de-history-vek";
         vekSelect.style.display = "none";
 
-        prevBtn = DEui.button("◀", () => { if (idx > 0) { idx--; show(); } });
-        nextBtn = DEui.button("▶", () => { if (idx < maxIdx()) { idx++; show(); } });
-        const dnesBtn = DEui.button("Dnes", () => {
+        prevBtn = window.DEui.button("◀", () => { if (idx > 0) { idx--; show(); } });
+        nextBtn = window.DEui.button("▶", () => { if (idx < maxIdx()) { idx++; show(); } });
+        const dnesBtn = window.DEui.button("Dnes", () => {
             zvolenyVek = aktualniVek;
             if (vekSelect) vekSelect.value = String(aktualniVek);
             naplnSnimkyVeku();
@@ -78,7 +78,7 @@
         label.id = "de-history-label";
         label.textContent = "…";
 
-        api.panel.appendChild(DEui.row(vekSelect, prevBtn, label, nextBtn, dnesBtn));
+        api.panel.appendChild(window.DEui.row(vekSelect, prevBtn, label, nextBtn, dnesBtn));
         setBusy(true);
     }
 

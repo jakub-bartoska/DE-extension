@@ -1,6 +1,4 @@
 (function () {
-    addMenuButtons();
-
     let allReports = [];
     let borderCertainColor = 'rgba(0, 255, 0, 1)';
     let borderNotSureColor = 'rgb(255,255,0, 1)';
@@ -11,6 +9,9 @@
     let negativeColor = 'rgba(255, 0, 0, 0.4)';
 
     let panelApi = null;
+
+    // až po deklaracích výše (buildPanel plní `panelApi` — nesmí běžet v TDZ)
+    addMenuButtons();
 
     function addMenuButtons() {
         let menu = document.getElementById("miniMenuContainer");
@@ -37,9 +38,9 @@
     // Panel staví sdílený UI kit (window.DEui) do Shadow DOM — jednotný vzhled
     // se zbytkem rozšíření a izolace od herního CSS.
     function buildPanel() {
-        panelApi = DEui.createPanel({ position: { display: "none" } });
-        panelApi.panel.appendChild(DEui.title("Obarvit dle kouzel"));
-        const seg = DEui.segmented(
+        panelApi = window.DEui.createPanel({ position: { display: "none" } });
+        panelApi.panel.appendChild(window.DEui.title("Obarvit dle kouzel"));
+        const seg = window.DEui.segmented(
             [["Porodnost", "Porodnost"], ["Zlato", "Zlato"], ["Mana", "Mana"], ["Nic", "Nic"]],
             (val) => {
                 if (window.DEfill) {

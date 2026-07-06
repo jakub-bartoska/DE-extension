@@ -384,14 +384,14 @@
     }
 
     function buildPanel() {
-        panelApi = DEui.createPanel({ position: { display: "none" } });
-        panelApi.panel.appendChild(DEui.title("Obarvit území podle"));
-        const seg = DEui.segmented(
+        panelApi = window.DEui.createPanel({ position: { display: "none" } });
+        panelApi.panel.appendChild(window.DEui.title("Obarvit území podle"));
+        const seg = window.DEui.segmented(
             [["hrac", "Hráčů"], ["aliance", "Aliancí"], ["", "Vypnout"]],
             (val) => colorByOwner(val || null), "");
         panelApi.panel.appendChild(seg.el);
-        panelApi.panel.appendChild(DEui.hr());
-        const bTog = DEui.toggle("Zvýraznit hranice", async (on) => {
+        panelApi.panel.appendChild(window.DEui.hr());
+        const bTog = window.DEui.toggle("Zvýraznit hranice", async (on) => {
             await ready();
             setBorders(on);
         }, false);
