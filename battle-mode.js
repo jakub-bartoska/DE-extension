@@ -118,9 +118,29 @@
         try {
             const d = new DOMParser().parseFromString(await decode("a.asp?id=" + id), "text/html");
             const rows = [...d.querySelectorAll("tr")].map((tr) => [...tr.children].map((td) => td.innerText.replace(/\s+/g, " ").trim())).filter((c) => c.join("").length);
-            const num = (label) => { const r = rows.find((r) => r[0] && r[0].indexOf(label) === 0); return r ? parseInt((r[1] || "").replace(/\D/g, "")) : null; };
+            // Souhrnný řádek najdi podle názvu (bez diakritiky, jako prefix) a vezmi
+            // z něj POSLEDNÍ číselnou buňku — hra tam má hodnotu dopočítanou na chlup
+            // (pevnost, stavby, hrdina, obyvatelé, vojenské smlouvy). Proto bereme
+            // obranu odsud, ne z odhadu.
+            const nrm = (s) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+            const stat = (aliases) => {
+                for (const r of rows) {
+                    if (!r[0]) continue;
+                    const n0 = nrm(r[0]);
+                    if (!aliases.some((a) => n0.startsWith(a))) continue;
+                    for (let i = r.length - 1; i >= 1; i--) {
+                        const v = (r[i] || "").replace(/[^\d]/g, "");
+                        if (v) return parseInt(v, 10);
+                    }
+                }
+                return null;
+            };
             const c = rows.filter((r) => r.length === 4 && r[0] && /^\d+$/.test(r[1]) && isCountCell(r[3])).map((r) => baseCount(r[3]));
-            return { atk: num("Útočná síla"), def: num("Aktuální obrana"), army: [c[0] || 0, c[1] || 0, c[2] || 0] };
+            return {
+                atk: stat(["utocna sila"]),
+                def: stat(["celkova obrana", "aktualni obrana", "obrana celkem"]),
+                army: [c[0] || 0, c[1] || 0, c[2] || 0],
+            };
         } catch (e) { return null; }
     }
     async function refreshLiveStats(doc) {
