@@ -4,7 +4,8 @@ Rozsireni do prohlizece pro hru **Dark Elf** (darkelf.cz). Prida na herni mapu t
 
 - **Barveni mapy podle kouzel** — vybarvi zeme podle odhadovane porodnosti z hlaseni tvych a spoluhracu.
 - **Historie mapy** — umozni preklikavat mapu na minule herni dny a videt, jak svet vypadal drive.
-- **Vybarveni uzemi podle vlastnika / aliance** — na prvni pohled je videt, kdo co ovlada.
+- **Vybarveni uzemi podle vlastnika / aliance** — na prvni pohled je videt, kdo co ovlada (vcetne pruhovaneho zvyrazneni cerstve dobytych zemi).
+- **Bojovy mod** — u tvych zemi ukaze presnou utocnou/obrannou silu a umozni primo z mapy verbovat, stavet a posilat utoky.
 
 A navic drobne pomucky na strankach zemi a hlaseni (odhad obrany neutralek, odhady sil v boji).
 
@@ -151,6 +152,12 @@ Na mape pribyde v horni liste **druha ikona**. Po kliknuti se otevre panel:
   se skutecnou vlastni barvou si ji udrzi, ostatni dostanou nahradu.
 - **Zvyraznit hranice** — obtahne kazdou zemi cerne, at jsou hranice jasne videt.
 
+**Cerstve dobyte zeme** (ty, ktere oproti minulemu hernimu dni zmenily majitele) se
+nevybarvi jednou barvou, ale **sikmymi pruhy**: siroky pruh ma barvu **noveho** vlastnika,
+uzky pruh barvu **puvodniho** (tu dohleda z historie). Kdyz nekdo obsadil neutralku, je
+uzky pruh pruhledny (prosvita mapa). Diky tomu na prvni pohled vidis, kde se zrovna
+prehazuji uzemi a kdo je komu sebral.
+
 Toto obarvovani pouziva i **Funkce 1** (kouzla) — misto puvodnich kolecek vyplni celou zem.
 
 Obarveni **funguje i v historii** (Funkce 2): kdyz se vracis v case a zeme zmenila
@@ -169,6 +176,57 @@ Diky tomu je to okamzite a **nezatezuje prohlizec**.
 
 Hranice zemi jsou v stare i nove grafice na stejnych pixelech, takze vyplne sedi **at hrajes s
 jakoukoli grafikou**.
+
+---
+
+# Funkce 4: Bojovy mod
+
+Bojovy mod z tebe udela velitele primo na mape — u kazde **tve zeme** ukaze presnou silu
+a das odsud rovnou verbovat, stavet i utocit, aniz bys musel proklikavat stranky hry.
+
+> Tahle funkce je jen pro **prihlaseneho hrace**. Pozorovateli (spectator mapa) se
+> neobjevi. Data bere z oficialniho exportu mapy (`map_export_json.asp`).
+
+## Zapnuti
+
+V mapovem menu pribude **zelena ikona s mecem**. Chvili po nacteni mapy je „nedostupna"
+(nacitaji se data — bezi na ni prouzek), pak zezelena a da se kliknout. Kliknutim mod
+zapnes/vypnes.
+
+## Co uvidis u svych zemi
+
+U kazde tve zeme se nad vlajkou objevi **stitek se silou** a vedle **tri tlacitka**:
+
+- **Sila** — cervene cislo s mecem = **utocna sila** (pocitano jako pres vyhlasenou valku,
+  tzn. bez postihu), modre cislo se stitem = **obranna sila**. Cisla se berou co nejpresneji
+  ze hry (vcetne pevnosti, staveb, hrdiny, obyvatel).
+- **Utok** (sipka) — spusti miereni: od zeme se natahne sipka k nejblizsimu moznemu cili.
+  Najedes mysi na cil a **kliknutim odesles cely domaci oddil**. U neutralnich zemi se
+  navic ukaze **potrebna sila k dobyti** — zelene kdyz tvuj utok staci, cervene kdyz ne.
+  - **klik** = dobyvacny utok
+  - **Shift + klik** = plenivy utok
+  - **Ctrl + klik** = presun vojska
+  - **Esc** nebo **pravy klik** = zrusit mireni
+- **Verbovani** (panacek) — otevre panel s posuvniky pro jednotlive typy jednotek. Posuvniky
+  samy hlidaji, kolik si muzes dovolit (zlato, mana i pocet volnych vesnicanu). Jednim
+  tlacitkem naverbujes.
+- **Stavby** (krumpac) — nabidne stavby, ktere v te zemi jeste nestoji a **zvysuji utok nebo
+  obranu** (utocne, obranne, pevnostni). Zaskrtnes a postavis.
+
+## Sipky odeslanych utoku
+
+Vsechny **tve prave probihajici utoky** se na mape vykresli jako **sipky** od zdroje k cili
+(barva podle typu: dobyvacny / plenivy / presun) s **odznakem sily** utoku. Seznam se sam
+obcerstvuje, takze zrusene i nove utoky se promitnou.
+
+> **Pozor:** tlacitka **opravdu provadi akce ve hre** — naverbovani, stavba i odeslany utok
+> jsou skutecne tahy, ne jen nahled. Odesila se cely domaci oddil dane zeme.
+
+## Jak to funguje "pod kapotou"
+
+Sila se pocita ze statu jednotek jednotlivych ras a hernich vzorcu; presne stavy (armada,
+utocna a obranna sila) se ctou zivo ze stranky zeme, protoze oficialni export je chvili
+cachovany. Po tve akci (verbovani/utok) se stav rovnou upravi, aby cisla sedela hned.
 
 ---
 
