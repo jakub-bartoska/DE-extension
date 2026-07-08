@@ -140,7 +140,14 @@
         return m;
     }
 
-    window.DEhistory = { prevDayOwners };
+    // Prohlížíme živou (dnešní) mapu? Živá = aktuální epocha + slot za posledním
+    // dnem. Bojový mód to používá, aby v historii skryl štítky neutrálek (archiv
+    // nemá historický min_utok/MO).
+    function isLive() {
+        return zvolenyVek === aktualniVek && idx >= snimky.length;
+    }
+
+    window.DEhistory = { prevDayOwners, isLive };
 
     async function loadSnapshots() {
         try {
@@ -241,6 +248,9 @@
     // Po přehození času překreslit obarvení podle nových vlastníků (pokud běží).
     function reapplyFill() {
         if (window.DEfill && window.DEfill.reapply) window.DEfill.reapply();
+        // Překreslit i bojový overlay — v historii skryje štítky neutrálek
+        // (nemáme historický min_utok/MO), na „Dnes" je zase zobrazí.
+        if (window.DEbattle && window.DEbattle.render) window.DEbattle.render();
     }
 
     function setAttr(el, name, value) {

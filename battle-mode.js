@@ -33,17 +33,92 @@
     // pevnostní koef [útok,obrana] — TODO přesné mapování z img_pevnost; zatím [1,1]
     function fortressCoef() { return { atk: 1, def: 1 }; }
 
-    // přesná útočná (přes válku = bez postihu −30 %) a obranná síla z JSON dat
+    // Staty hrdiny stojícího na zemi — heroStats: landId -> {baseAtk, atkPct} | null.
+    // Hra do zobrazené útočné síly ("14+12") NEzapočítává % level útoku hrdiny,
+    // proto ho čteme z hero.asp a doplňujeme ve výpočtu útoku (computeAtk).
+    const heroStats = {};
+    function heroIdForLand(doc, landId) {
+        const div = doc.getElementById("h" + landId);
+        const a = div && div.querySelector('a[href*="hero.asp?h="]');
+        const m = a && a.getAttribute("href").match(/h=(\d+)/);
+        return m ? m[1] : null;
+    }
+    async function fetchHeroStats(doc, landId) {
+        const heroId = heroIdForLand(doc, landId);
+        if (!heroId) { heroStats[landId] = null; return; }
+        try {
+            const d = new DOMParser().parseFromString(await decode("hero.asp?h=" + heroId), "text/html");
+            const rows = [...d.querySelectorAll("tr")].map((tr) => [...tr.children].map((td) => td.innerText.replace(/\s+/g, " ").trim())).filter((c) => c.join("").length);
+            const val = (label) => { const r = rows.find((r) => r[0] && r[0].indexOf(label) === 0); return r ? (r[1] || "") : ""; };
+            const baseAtk = parseInt((val("Útok a obrana").split(/\s+/)[0] || "").replace(/[^\d]/g, ""), 10) || 0; // "12 9" → 12
+            const atkPct = parseInt(val("Level útok").replace(/[^\d-]/g, ""), 10) || 0;                             // "+25%" → 25
+            heroStats[landId] = { baseAtk, atkPct };
+        } catch (e) { heroStats[landId] = null; }
+    }
+
+    // PŘESNÝ útok dle DEScripts vzorce (viz skill darkelf-vzorce):
+    //   útok = Σ(jednotky × útok_jednotky)
+    //   útok = floor(útok × (100 + % level útoku hrdiny) / 100)
+    //   útok = útok + základní útok hrdiny         (absolutní, nenásobí se)
+    //   útok = floor(útok × koef pevnosti)
+    // Rasový bonus hrdiny (+20 % proti konkrétní rase) je závislý na cíli → do
+    // obecného štítku ho nezahrnujeme. Modlitebna/Katapult neznáme (nemáme data
+    // staveb) → vynecháno.
+    function computeAtk(z, army) {
+        const r = RACE[z.id_rasa] || { atk: [0, 0, 0] };
+        let a = army[0] * r.atk[0] + army[1] * r.atk[1] + army[2] * r.atk[2];
+        const h = heroStats[z.id];
+        a = Math.floor(a * (100 + (h ? h.atkPct : 0)) / 100);
+        a += h ? h.baseAtk : 0;
+        return Math.floor(a * fortressCoef(z.img_pevnost).atk);
+    }
+
+    // útok (vlastní výpočet vč. hrdiny) + obrana (odhad; přesná se čte z a.asp)
     function computePower(z) {
         const p = z.private || {};
         const r = RACE[z.id_rasa] || { atk: [0, 0, 0], def: [0, 0, 0] };
         const a = [p.doma_war1 || 0, p.doma_war2 || 0, p.doma_war3 || 0];
-        let ua = 0, ud = 0;
-        for (let i = 0; i < 3; i++) { ua += a[i] * r.atk[i]; ud += a[i] * r.def[i]; }
+        let ud = 0;
+        for (let i = 0; i < 3; i++) ud += a[i] * r.def[i];
         const f = fortressCoef(z.img_pevnost);
-        const atk = Math.floor(ua * f.atk);
+        const atk = computeAtk(z, a);
         const def = Math.floor(ud * f.def * (1 + (z.bonus_obrana || 0) / 100)) + (p.obyvatel || 0);
         return { atk, def };
+    }
+
+    // Odhad magické obrany (MO) neutrálky — port ze starých skriptů (moNeutralky).
+    // Zobrazenou sílu neutrálky rozloží na Zbrojnoše (síla 6) + Mudrce (síla 8 =
+    // její mágové), z min_utok odhadne obyvatele a domy a spočte
+    // MO = floor(3 × mudrci² / domů). Počet domů roste v čase → přes binomické
+    // rozdělení; vracíme NEJpravděpodobnější MO.
+    // Návrat: { mo, approx } nebo null. `approx=true` = rozklad vyžaduje víc
+    // jednotek, než připouští růst za daný den (neutrálka nesedí na standardní
+    // model — nejspíš dřív obsazená/vrácená); MO je pak jen hrubý odhad (může být
+    // dost mimo, reálně i násobně víc). null = sílu nelze rozložit vůbec.
+    function neutralMO(z, den) {
+        const vojsko = z.land_power, sila = z.min_utok, bonus = z.bonus_obrana || 0;
+        if (!vojsko || sila == null || den == null) return null;
+        const choose = (n, k) => { let r = 1; for (let x = n - k + 1; x <= n; x++) r *= x; for (let x = 2; x <= k; x++) r /= x; return r; };
+        const maxJ = Math.floor((vojsko - 16) / 6) + 1;
+        for (let i = 0; i < maxJ; i++) {
+            if ((vojsko - i * 6) % 8 !== 0) continue;        // tolik jednotek nemůže být
+            const mudrci = (vojsko - i * 6) / 8;
+            const unitsDef = Math.floor((i * 5 + mudrci * 4) * (1 + bonus / 100));
+            const obyv = sila - unitsDef - 1;
+            if (obyv > 10 + den) continue;                   // moc obyvatel na daný den → jiná kombinace
+            const approx = (i > den * 2 + 6 || mudrci > den * 2 + 2); // víc jednotek, než den dovolí → nejisté
+            const minDomky = Math.max(48, i + mudrci + obyv);
+            const results = {};
+            for (let jj = 0; jj <= den; jj++) {
+                const prob = Math.pow(0.5, den) * choose(den, jj);
+                const mo = Math.floor((mudrci * mudrci * 3) / (minDomky + jj));
+                results[mo] = (results[mo] || 0) + prob;
+            }
+            let best = null, bestP = -1;
+            for (const k in results) if (results[k] > bestP) { bestP = results[k]; best = +k; }
+            return { mo: best, approx };
+        }
+        return null;
     }
 
     // ------------------------------------------------------------- data
@@ -107,8 +182,7 @@
         } catch (e) { return null; }
     }
     function atkFromArmy(z, army) {
-        const r = RACE[z.id_rasa] || { atk: [0, 0, 0] };
-        return Math.floor((army[0] * r.atk[0] + army[1] * r.atk[1] + army[2] * r.atk[2]) * fortressCoef(z.img_pevnost).atk);
+        return computeAtk(z, army); // vč. koeficientu hrdiny (heroStats)
     }
 
     // PŘESNÁ útočná/obranná síla + armáda z a.asp (hra počítá vše přesně — vč.
@@ -129,15 +203,20 @@
                     const n0 = nrm(r[0]);
                     if (!aliases.some((a) => n0.startsWith(a))) continue;
                     for (let i = r.length - 1; i >= 1; i--) {
-                        const v = (r[i] || "").replace(/[^\d]/g, "");
-                        if (v) return parseInt(v, 10);
+                        const raw = r[i] || "";
+                        if (!/\d/.test(raw)) continue;
+                        // "14 + 12" (základ + bonus přes válku) → součet částí.
+                        // NE replace(/[^\d]/g,"") přes celé — to by dalo "1412".
+                        // Split podle "+", každá část zvlášť (mezera = tisíce → 1 číslo).
+                        return raw.split("+").reduce((a, part) => a + (parseInt(part.replace(/[^\d]/g, ""), 10) || 0), 0);
                     }
                 }
                 return null;
             };
             const c = rows.filter((r) => r.length === 4 && r[0] && /^\d+$/.test(r[1]) && isCountCell(r[3])).map((r) => baseCount(r[3]));
+            // Útok NEbereme z hry ("14+12" nezapočítává % level hrdiny) — počítáme
+            // ho sami z armády + hrdiny (computeAtk), viz refreshLiveStats.
             return {
-                atk: stat(["utocna sila"]),
                 def: stat(["celkova obrana", "aktualni obrana", "obrana celkem"]),
                 army: [c[0] || 0, c[1] || 0, c[2] || 0],
             };
@@ -145,7 +224,10 @@
     }
     async function refreshLiveStats(doc) {
         if (!on || !isPlayer()) return;
-        await Promise.all(myLands().map(async (z) => { const s = await parseAasp(z.id); if (s) liveStats[z.id] = s; }));
+        await Promise.all(myLands().map(async (z) => {
+            const [s] = await Promise.all([parseAasp(z.id), fetchHeroStats(doc, z.id)]);
+            if (s) { s.atk = computeAtk(z, s.army); liveStats[z.id] = s; } // útok počítáme sami vč. hrdiny
+        }));
         render(doc);
     }
 
@@ -197,10 +279,13 @@
   justify-content:center;cursor:pointer;background:#1a0a00;border:1px solid #7a3010;border-radius:4px;
   color:#e7a86a;box-shadow:1px 1px 2px #000;box-sizing:border-box}
 .de-bm-b:hover{background:#7a3010;color:#ffd9a0}
-.de-bm-mlabel{position:absolute!important;z-index:17;display:flex!important;align-items:center;justify-content:center;
+.de-bm-mlabel{position:absolute!important;z-index:17;display:flex!important;flex-direction:column;align-items:center;justify-content:center;gap:1px;
   pointer-events:none;margin:0!important}
-.de-bm-mlabel span{font:bold 12px Arial;color:#fff;background:rgba(150,20,20,.94);border:1px solid #ffd98a;
-  border-radius:4px;padding:0 4px;line-height:15px;box-shadow:1px 1px 2px #000;white-space:nowrap}`;
+.de-bm-mlabel .sila{font:600 11px Arial;color:#ffdcdc;background:rgba(120,18,18,.55);border:1px solid rgba(255,180,120,.26);
+  border-radius:4px;padding:0 4px;line-height:14px;box-shadow:0 1px 1px rgba(0,0,0,.28);white-space:nowrap}
+.de-bm-mlabel .mo{font:600 8px Arial;color:#bcd2f2;background:rgba(24,54,120,.44);border:1px solid rgba(150,190,255,.28);
+  border-radius:3px;padding:0 3px;line-height:11px;box-shadow:none;white-space:nowrap;opacity:.75}
+.de-bm-mlabel .mo.approx{font-style:italic;color:#9fb6dc;border-style:dashed;opacity:.58}`;
         doc.head.appendChild(st);
     }
 
@@ -405,7 +490,7 @@
                     zz.private.obyvatel = Math.max(0, zz.private.obyvatel - tiers.reduce((s, t) => s + t.val, 0));
                 }
                 delete liveStats[z.id]; render(doc); // starý liveStats by přebil optimistický stav
-                parseAasp(z.id).then((s) => { if (s) { liveStats[z.id] = s; render(doc); } }); // přesné z a.asp
+                Promise.all([parseAasp(z.id), fetchHeroStats(doc, z.id)]).then(([s]) => { if (s) { s.atk = computeAtk(z, s.army); liveStats[z.id] = s; render(doc); } }); // přesné z a.asp + útok vč. hrdiny
                 setTimeout(() => openRecruit(doc, z, ev), 400); // panel se přenačte z živého a.asp
             };
             body.appendChild(btn);
@@ -472,11 +557,15 @@
         closePanel(); exitAttack(doc);
         const army = await liveArmy(z.id); // ŽIVÁ armáda (ne cache) — kvůli čerstvě naverbovaným
         if (!army || (!army[0] && !army[1] && !army[2])) { toast(doc, "V „" + z.zeme + "“ není doma žádná armáda.", "#a33"); return; }
-        let targets;
+        let targets, heroOpts = [];
         try {
             const d = new DOMParser().parseFromString(await decode("utok.asp?id=" + z.id), "text/html");
             const sel = d.querySelector('select[name="cil"]');
             targets = sel ? [...sel.options].filter((o) => o.value).map((o) => ({ id: o.value, name: o.text.replace(/\s+/g, " ").trim() })) : [];
+            // hrdinové dostupní k odeslání z této země (select[name=hero]); může jich
+            // být víc, "" = bez hrdiny. Do dropdownu dáme všechny volby.
+            const hSel = d.querySelector('select[name="hero"]');
+            if (hSel) heroOpts = [...hSel.options].map((o) => ({ value: o.value, name: o.text.replace(/\s+/g, " ").trim() }));
         } catch (e) { toast(doc, "Nepodařilo se načíst cíle útoku.", "#a33"); return; }
         if (!targets.length) { toast(doc, "Odsud není na koho zaútočit.", "#a33"); return; }
         const NS = "http://www.w3.org/2000/svg";
@@ -489,9 +578,37 @@
         const tip = doc.createElement("section");
         tip.style.cssText = "position:fixed;z-index:100000;background:#1a0a00;border:1px solid #7a3010;border-radius:5px;padding:3px 7px;font:bold 12px Arial;color:#fff;pointer-events:none;white-space:nowrap;display:none";
         doc.body.appendChild(tip);
+        // Volby pro tento útok: který hrdina jde s útokem (dropdown — může jich být
+        // víc, "" = bez hrdiny; default = první dostupný) a placená Pomoc rytíře.
+        const heroesAvail = heroOpts.filter((o) => o.value);
+        let heroVal = heroesAvail.length ? heroesAvail[0].value : "", buyKnight = false;
         const hint = doc.createElement("section");
-        hint.style.cssText = "position:fixed;left:50%;top:14px;transform:translateX(-50%);z-index:100000;background:#1a0a00;border:1px solid #7a3010;border-radius:6px;padding:6px 12px;font:12px Arial;color:#e7a86a;pointer-events:none";
-        hint.textContent = "Útok z „" + z.zeme + "“ → najeď na cíl a klikni (dobyvačný) · Shift=plenivý · Ctrl=přesun · Esc zruší";
+        hint.style.cssText = "position:fixed;left:50%;top:14px;transform:translateX(-50%);z-index:100000;background:#1a0a00;border:1px solid #7a3010;border-radius:6px;padding:6px 12px;font:12px Arial;color:#e7a86a;display:flex;align-items:center;gap:14px";
+        const hintTxt = doc.createElement("span");
+        hintTxt.textContent = "Útok z „" + z.zeme + "“ → najeď na cíl a klikni · Shift=plenivý · Ctrl=přesun · Esc zruší";
+        hint.appendChild(hintTxt);
+        if (heroesAvail.length) {
+            const wrap = doc.createElement("label");
+            wrap.style.cssText = "display:inline-flex;align-items:center;gap:5px;color:#f0c07a;white-space:nowrap";
+            wrap.appendChild(doc.createTextNode("Hrdina:"));
+            const hsel = doc.createElement("select");
+            hsel.style.cssText = "background:#5a1616;color:#f0e0c0;border:1px solid #7a3030;border-radius:5px;font:600 12px Arial;padding:2px 4px;cursor:pointer";
+            heroOpts.forEach((o) => {
+                const opt = doc.createElement("option");
+                opt.value = o.value; opt.textContent = o.value ? o.name : "— bez hrdiny —";
+                if (o.value === heroVal) opt.selected = true;
+                hsel.appendChild(opt);
+            });
+            hsel.addEventListener("change", () => { heroVal = hsel.value; });
+            wrap.appendChild(hsel); hint.appendChild(wrap);
+        }
+        const kl = doc.createElement("label");
+        kl.style.cssText = "display:inline-flex;align-items:center;gap:4px;cursor:pointer;color:#f0c07a;white-space:nowrap";
+        const kcb = doc.createElement("input");
+        kcb.type = "checkbox"; kcb.style.cssText = "cursor:pointer;margin:0";
+        kcb.addEventListener("change", () => { buyKnight = kcb.checked; });
+        kl.appendChild(kcb); kl.appendChild(doc.createTextNode(" Pomoc rytíře"));
+        hint.appendChild(kl);
         doc.body.appendChild(hint);
         const myAtk = atkFromArmy(z, army); // z živé armády
         let cur = null;
@@ -512,9 +629,11 @@
                 : ` <span style="color:#aaa">útok ${myAtk}</span>`);
         };
         const onClick = (e) => {
+            if (hint.contains(e.target)) return; // klik na přepínače v liště neodesílá útok
             if (!cur) return; e.preventDefault(); e.stopPropagation();
             const t = cur, typ = e.shiftKey ? "3" : e.ctrlKey ? "1" : "4"; // 4 dobyv., 3 plen., 1 přesun
-            exitAttack(doc); sendAttack(doc, z, t, army, typ);
+            const hName = (heroOpts.find((o) => o.value === heroVal) || {}).name;
+            exitAttack(doc); sendAttack(doc, z, t, army, typ, { heroId: heroVal || null, heroName: hName, buyKnight });
         };
         const onCtx = (e) => { e.preventDefault(); exitAttack(doc); };
         const onKey = (e) => { if (e.key === "Escape") exitAttack(doc); };
@@ -526,16 +645,22 @@
         buildAttackBorders(doc, z, targets); // obarvit hranice zdroje/cílů + min_utok u neutrálů
     }
     const TYP_NAME = { "4": "dobyvačný", "3": "plenivý", "1": "přesun" };
-    async function sendAttack(doc, z, target, army, typ) {
+    async function sendAttack(doc, z, target, army, typ, opts) {
         typ = typ || "4";
+        opts = opts || {};
         try {
-            const body = new URLSearchParams({
+            const params = {
                 id_zeme_zdroj: String(z.id), cil: String(target.id), typ: typ,
-                T1: String(army[0]), T2: String(army[1]), T3: String(army[2]), odeslat: "Odeslat vojsko",
-            }).toString();
+                T1: String(army[0]), T2: String(army[1]), T3: String(army[2]),
+                hero: opts.heroId ? String(opts.heroId) : "", // hrdina jde s útokem (když je na zemi a není odškrtnutý)
+                odeslat: "Odeslat vojsko",
+            };
+            if (opts.buyKnight) params.buy_knight = "1"; // placená „pomoc rytíře"
+            const body = new URLSearchParams(params).toString();
             const res = await decode("utok_poslat.asp", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body });
             const okMsg = (res.match(/dorazí[^<\n]{0,40}/) || [])[0];
-            toast(doc, `Útok (${TYP_NAME[typ]}) → ${target.name}` + (okMsg ? " · " + okMsg.trim() : ""), "#5a2a10");
+            const extra = (opts.heroId ? " +" + (opts.heroName || "hrdina") : "") + (opts.buyKnight ? " +rytíř" : "");
+            toast(doc, `Útok (${TYP_NAME[typ]}) → ${target.name}${extra}` + (okMsg ? " · " + okMsg.trim() : ""), "#5a2a10");
         } catch (e) { toast(doc, "Odeslání selhalo: " + e.message, "#a33"); }
         // optimisticky: odeslaná armáda opustila domov (map_export_json je ~2 min cachovaný)
         const zz = DATA.zeme.find((x) => x.id === z.id);
@@ -545,7 +670,7 @@
             zz.private.doma_war3 = Math.max(0, zz.private.doma_war3 - army[2]);
         }
         delete liveStats[z.id]; render(doc); // render() volá i renderArrows() → nová šipka
-        parseAasp(z.id).then((s) => { if (s) { liveStats[z.id] = s; render(doc); } }); // přesná síla po odeslání
+        Promise.all([parseAasp(z.id), fetchHeroStats(doc, z.id)]).then(([s]) => { if (s) { s.atk = computeAtk(z, s.army); liveStats[z.id] = s; render(doc); } }); // přesná síla po odeslání (útok vč. hrdiny)
     }
 
     // ------------------------------------------------------------- ŠIPKY ODESLANÝCH ÚTOKŮ
@@ -670,19 +795,28 @@
             cl.appendChild(btns);
             land.parentElement.appendChild(cl);
         }
+        // V historii (prohlížení minulého dne) štítky neutrálek skryjeme — archiv
+        // ukládá jen sílu, historický min_utok ani MO nemáme, takže bychom ukazovali
+        // živé hodnoty přes starou mapu. Na „Dnes" se zase objeví.
+        if (window.DEhistory && typeof window.DEhistory.isLive === "function" && !window.DEhistory.isLive()) return;
         // potřebná síla (min_utok) na VŠECH neutrálech, na místě vlajky.
         // Nejdřív BATCH čtení pozic (offsetLeft/Top), pak zápis — ať to netrhá layout.
+        const den = DATA.hlavicka ? DATA.hlavicka.den : null;
         const items = [];
         for (const z of DATA.zeme) {
             if (!neutralZeme(z) || z.min_utok == null) continue;
             const land = doc.getElementById("x" + z.id);
-            if (land) items.push({ m: z.min_utok, land, l: land.offsetLeft, t: land.offsetTop, w: land.offsetWidth, h: land.offsetHeight });
+            if (land) items.push({ m: z.min_utok, mo: neutralMO(z, den), land, l: land.offsetLeft, t: land.offsetTop, w: land.offsetWidth, h: land.offsetHeight });
         }
         for (const it of items) {
             const lab = doc.createElement("div");
             lab.className = "de-bm-mlabel";
             lab.style.cssText = `left:${it.l}px;top:${it.t}px;width:${it.w}px;height:${it.h}px`;
-            lab.innerHTML = `<span>${it.m}</span>`;
+            // hlavní = síla neutrálky (červená); MO = doplňkové (menší, modré).
+            // approx = neutrálka nesedí na model → hrubý odhad, značíme „~N?".
+            const mo = it.mo;
+            lab.innerHTML = `<span class="sila">${it.m}</span>` +
+                (mo ? `<span class="mo${mo.approx ? " approx" : ""}">MO: ${mo.approx ? "~" : ""}${mo.mo}${mo.approx ? "?" : ""}</span>` : "");
             it.land.parentElement.appendChild(lab);
         }
     }
