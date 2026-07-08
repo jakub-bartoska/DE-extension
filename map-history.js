@@ -49,7 +49,11 @@
     // rozšíření. Vlevo nahoře… ne, vpravo nahoře, v Shadow DOM hostu.
 
     function buildPanel() {
-        const api = window.DEui.createPanel({ position: { top: "8px", right: "8px", left: "auto" } });
+        const api = window.DEui.createPanel({
+            position: { top: "8px", right: "8px", left: "auto" },
+            draggable: true,
+            storageKey: "de-history-pos",
+        });
         api.show();
 
         api.panel.appendChild(window.DEui.title("Historie mapy"));

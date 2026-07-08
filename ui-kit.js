@@ -29,6 +29,9 @@
             color:#ecd9b0; font-size:13px; white-space:nowrap; }
         .de-title { font-weight:700; font-size:11px; letter-spacing:.09em;
             text-transform:uppercase; color:#f0c07a; opacity:.92; }
+        .de-panel.de-draggable { touch-action:none; }
+        .de-panel.de-draggable .de-title { cursor:move; }
+        .de-panel.de-dragging { user-select:none; }
         .de-seg { display:inline-flex; padding:3px; gap:3px; border-radius:7px;
             background:#2a0606; box-shadow:inset 0 1px 3px rgba(0,0,0,.5); }
         .de-seg button { cursor:pointer; border:0; background:transparent; color:#e8c8a8;
@@ -66,6 +69,75 @@
             background:linear-gradient(90deg,transparent,#7a3030,transparent); }
     `;
 
+    // Interaktivní prvky, za které se NEtáhne (musí normálně reagovat na klik).
+    function isInteractive(el) {
+        return el && el.closest &&
+            el.closest("button, select, input, textarea, .de-toggle, .de-seg");
+    }
+
+    // Umožní panel chytit myší a přetáhnout. Pozici drží na `host` (fixed) přes
+    // left/top; right/bottom vynulujeme, aby se nebily s původním zarovnáním.
+    function makeDraggable(host, panel, storageKey) {
+        function place(left, top) {
+            // udržet aspoň kousek panelu ve viewportu (ať nezmizí za okrajem)
+            const r = host.getBoundingClientRect();
+            const maxLeft = Math.max(0, window.innerWidth - Math.min(r.width, 80));
+            const maxTop = Math.max(0, window.innerHeight - 30);
+            left = Math.max(-(r.width - 80), Math.min(left, maxLeft));
+            top = Math.max(0, Math.min(top, maxTop));
+            Object.assign(host.style, {
+                left: left + "px", top: top + "px", right: "auto", bottom: "auto",
+            });
+        }
+
+        // obnovit uloženou pozici
+        if (storageKey) {
+            try {
+                const saved = JSON.parse(localStorage.getItem(storageKey) || "null");
+                if (saved && typeof saved.left === "number") place(saved.left, saved.top);
+            } catch (e) { /* ignore */ }
+        }
+
+        let startX, startY, baseLeft, baseTop, dragging = false;
+
+        // Pointer Events + setPointerCapture: po stisku míří všechny pohyby na
+        // panel, takže je herní mapa (vlastní mouse handlery) nepřebije.
+        panel.addEventListener("pointerdown", (e) => {
+            if (e.button !== 0 || isInteractive(e.target)) return;
+            const r = host.getBoundingClientRect();
+            baseLeft = r.left;
+            baseTop = r.top;
+            startX = e.clientX;
+            startY = e.clientY;
+            dragging = true;
+            panel.classList.add("de-dragging");
+            try { panel.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+            e.preventDefault();
+            e.stopPropagation();
+        });
+
+        panel.addEventListener("pointermove", (e) => {
+            if (!dragging) return;
+            place(baseLeft + (e.clientX - startX), baseTop + (e.clientY - startY));
+            e.preventDefault();
+        });
+
+        function endDrag(e) {
+            if (!dragging) return;
+            dragging = false;
+            panel.classList.remove("de-dragging");
+            try { panel.releasePointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+            if (storageKey) {
+                const r = host.getBoundingClientRect();
+                try {
+                    localStorage.setItem(storageKey, JSON.stringify({ left: r.left, top: r.top }));
+                } catch (err) { /* ignore */ }
+            }
+        }
+        panel.addEventListener("pointerup", endDrag);
+        panel.addEventListener("pointercancel", endDrag);
+    }
+
     function createPanel(opts) {
         opts = opts || {};
         const host = document.createElement("section"); // NE div (mapa div mangluje)
@@ -79,6 +151,16 @@
         panel.className = "de-panel";
         shadow.appendChild(panel);
         document.body.appendChild(host);
+
+        // Přetahování panelu — jen když si o něj panel řekne (opts.draggable).
+        // Chytit lze za titulek nebo kdekoli po volné ploše panelu (ne za
+        // tlačítka/select/toggle/segment — ty musí normálně klikat). Uloženou
+        // pozici (opts.storageKey) obnovíme; jinak platí opts.position.
+        if (opts.draggable) {
+            panel.classList.add("de-draggable");
+            makeDraggable(host, panel, opts.storageKey);
+        }
+
         return {
             host, shadow, panel,
             show() { host.style.display = "block"; },
