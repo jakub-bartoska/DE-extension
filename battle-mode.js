@@ -87,14 +87,15 @@
     }
 
     // Odhad magické obrany (MO) neutrálky — port ze starých skriptů (moNeutralky).
-    // Zobrazenou sílu neutrálky rozloží na Zbrojnoše (síla 6) + Mudrce (síla 8 =
-    // její mágové), z min_utok odhadne obyvatele a domy a spočte
-    // MO = floor(3 × mudrci² / domů). Počet domů roste v čase → přes binomické
-    // rozdělení; vracíme NEJpravděpodobnější MO.
-    // Návrat: { mo, approx } nebo null. `approx=true` = rozklad vyžaduje víc
-    // jednotek, než připouští růst za daný den (neutrálka nesedí na standardní
-    // model — nejspíš dřív obsazená/vrácená); MO je pak jen hrubý odhad (může být
-    // dost mimo, reálně i násobně víc). null = sílu nelze rozložit vůbec.
+    // Zobrazenou sílu rozloží na Zbrojnoše (síla 6) + Mudrce (síla 8 = její mágové),
+    // z min_utok odhadne obyvatele a domy a spočte MO = floor(3 × mudrci² / domů).
+    // Přesný počet domů neznáme (roste v čase) → binomické rozdělení dá ROZSAH
+    // možných MO s pravděpodobnostmi.
+    // Návrat:
+    //   { min, max, dist:[{mo,pct}…] } — MO je rozsah min–max, dist = procenta;
+    //   { unknown:true } — rozklad nesedí na model (nejspíš odlogovaná neutrálka),
+    //                      MO nelze odhadnout;
+    //   null — chybí vstupy (nezobrazovat nic).
     function neutralMO(z, den) {
         const vojsko = z.land_power, sila = z.min_utok, bonus = z.bonus_obrana || 0;
         if (!vojsko || sila == null || den == null) return null;
@@ -106,7 +107,9 @@
             const unitsDef = Math.floor((i * 5 + mudrci * 4) * (1 + bonus / 100));
             const obyv = sila - unitsDef - 1;
             if (obyv > 10 + den) continue;                   // moc obyvatel na daný den → jiná kombinace
-            const approx = (i > den * 2 + 6 || mudrci > den * 2 + 2); // víc jednotek, než den dovolí → nejisté
+            // Rozklad vyžaduje víc jednotek, než připouští růst za daný den →
+            // neutrálka nesedí na model (nejspíš po odlogovaném hráči) → neznámé.
+            if (i > den * 2 + 6 || mudrci > den * 2 + 2) return { unknown: true };
             const minDomky = Math.max(48, i + mudrci + obyv);
             const results = {};
             for (let jj = 0; jj <= den; jj++) {
@@ -114,11 +117,11 @@
                 const mo = Math.floor((mudrci * mudrci * 3) / (minDomky + jj));
                 results[mo] = (results[mo] || 0) + prob;
             }
-            let best = null, bestP = -1;
-            for (const k in results) if (results[k] > bestP) { bestP = results[k]; best = +k; }
-            return { mo: best, approx };
+            const dist = Object.entries(results).map(([mo, p]) => ({ mo: +mo, pct: p })).sort((a, b) => a.mo - b.mo);
+            const vals = dist.map((d) => d.mo);
+            return { min: Math.min(...vals), max: Math.max(...vals), dist };
         }
-        return null;
+        return { unknown: true }; // nešlo rozložit v rámci obyvatel → taky neznámé
     }
 
     // ------------------------------------------------------------- data
@@ -284,8 +287,8 @@
 .de-bm-mlabel .sila{font:600 11px Arial;color:#ffdcdc;background:rgba(120,18,18,.55);border:1px solid rgba(255,180,120,.26);
   border-radius:4px;padding:0 4px;line-height:14px;box-shadow:0 1px 1px rgba(0,0,0,.28);white-space:nowrap}
 .de-bm-mlabel .mo{font:600 8px Arial;color:#bcd2f2;background:rgba(24,54,120,.44);border:1px solid rgba(150,190,255,.28);
-  border-radius:3px;padding:0 3px;line-height:11px;box-shadow:none;white-space:nowrap;opacity:.75}
-.de-bm-mlabel .mo.approx{font-style:italic;color:#9fb6dc;border-style:dashed;opacity:.58}`;
+  border-radius:3px;padding:0 3px;line-height:11px;box-shadow:none;white-space:nowrap;opacity:.75;pointer-events:auto;cursor:help}
+.de-bm-mlabel .mo.unknown{color:#d9c2a0;background:rgba(70,55,35,.42);border-style:dashed;border-color:rgba(200,170,120,.4);opacity:.72}`;
         doc.head.appendChild(st);
     }
 
@@ -813,10 +816,22 @@
             lab.className = "de-bm-mlabel";
             lab.style.cssText = `left:${it.l}px;top:${it.t}px;width:${it.w}px;height:${it.h}px`;
             // hlavní = síla neutrálky (červená); MO = doplňkové (menší, modré).
-            // approx = neutrálka nesedí na model → hrubý odhad, značíme „~N?".
+            // MO je rozsah „min–max"; hover (title) ukáže procenta jednotlivých
+            // hodnot. „???" = odlogovaná neutrálka, kde MO nejde odhadnout.
+            lab.innerHTML = `<span class="sila">${it.m}</span>`;
             const mo = it.mo;
-            lab.innerHTML = `<span class="sila">${it.m}</span>` +
-                (mo ? `<span class="mo${mo.approx ? " approx" : ""}">MO: ${mo.approx ? "~" : ""}${mo.mo}${mo.approx ? "?" : ""}</span>` : "");
+            if (mo) {
+                const moEl = doc.createElement("span");
+                moEl.className = "mo" + (mo.unknown ? " unknown" : "");
+                if (mo.unknown) {
+                    moEl.textContent = "MO: ???";
+                    moEl.title = "Nejspíš neutrálka po odlogovaném hráči — MO nelze odhadnout.";
+                } else {
+                    moEl.textContent = "MO: " + (mo.min === mo.max ? mo.min : mo.min + "–" + mo.max);
+                    moEl.title = mo.dist.map((d) => "MO " + d.mo + ": " + (Math.round(d.pct * 1000) / 10) + " %").join("\n");
+                }
+                lab.appendChild(moEl);
+            }
             it.land.parentElement.appendChild(lab);
         }
     }
