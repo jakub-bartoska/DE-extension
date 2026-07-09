@@ -50,6 +50,12 @@
             const d = new DOMParser().parseFromString(await decode("hero.asp?h=" + heroId), "text/html");
             const rows = [...d.querySelectorAll("tr")].map((tr) => [...tr.children].map((td) => td.innerText.replace(/\s+/g, " ").trim())).filter((c) => c.join("").length);
             const val = (label) => { const r = rows.find((r) => r[0] && r[0].indexOf(label) === 0); return r ? (r[1] || "") : ""; };
+            // Hrdina se do síly země počítá jen když na ní stojí ("Brání zemi").
+            // Když je odeslán s útokem, má stav "Přesouvá se" → fyzicky na zemi není,
+            // takže ho do útoku země NEzapočítáváme.
+            const stavRow = rows.find((r) => r[0] === "Stav");
+            const stav = (stavRow ? stavRow[1] : "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+            if (stav.includes("presouv")) { heroStats[landId] = null; return; }
             const baseAtk = parseInt((val("Útok a obrana").split(/\s+/)[0] || "").replace(/[^\d]/g, ""), 10) || 0; // "12 9" → 12
             const atkPct = parseInt(val("Level útok").replace(/[^\d-]/g, ""), 10) || 0;                             // "+25%" → 25
             heroStats[landId] = { baseAtk, atkPct };
