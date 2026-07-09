@@ -12,7 +12,8 @@
         "map-fill.js",
         "spell-results.js",
         "map-history.js",
-        "battle-mode.js"
+        "battle-mode.js",
+        "contracts-mode.js"
       ],
       "all_frames": true,
       "run_at": "document_idle"
