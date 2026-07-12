@@ -18,7 +18,7 @@
 
     const NS = "http://www.w3.org/2000/svg";
     const MAP_W = 2244, MAP_H = 1542; // 3×748 × 3×514
-    let svg = null, polys = {}, readyPromise = null;
+    let svg = null, polys = {}, readyPromise = null, polyG = null, borderImg = null;
     let activeMode = null; // "hrac" | "aliance" | null — kvůli překreslení po změně mapy
     // stabilní barvy: klíč (id hráče/aliance) → barva, drženo napříč dny historie
     const colorCache = { hrac: {}, aliance: {} };
@@ -71,16 +71,35 @@
             width: MAP_W + "px", height: MAP_H + "px",
             pointerEvents: "none", zIndex: "5", // < z-index vlajek (10) a hrdinů (16)
         });
+        // Polygony ve vlastní skupině — poloprůhlednost výplně se dává na skupinu
+        // (viz setLayerOpacity), aby se překryv sousedů nesčítal do tmavších švů.
+        polyG = document.createElementNS(NS, "g");
+        polyG.id = "de-fill-polys";
         for (const id in regions) {
             const pg = document.createElementNS(NS, "polygon");
             pg.setAttribute("points", regions[id]);
             pg.setAttribute("fill", "none");
             pg.setAttribute("stroke", "none");
-            pg.setAttribute("stroke-width", "1.4");
             pg.setAttribute("stroke-linejoin", "round");
             polys[id] = pg;
-            svg.appendChild(pg);
+            polyG.appendChild(pg);
         }
+        svg.appendChild(polyG);
+
+        // Overlay skutečné sítě hranic (borders.png = tyrkysová síť z mapy). Leží NAD
+        // výplněmi a MIMO skupinu s opacitou → čáry zůstanou ostré. Jedna sdílená čára
+        // pro všechny země (i neutrály), přesně po hranici. Přepíná se v setBorders.
+        borderImg = document.createElementNS(NS, "image");
+        borderImg.setAttribute("x", "0");
+        borderImg.setAttribute("y", "0");
+        borderImg.setAttribute("width", MAP_W);
+        borderImg.setAttribute("height", MAP_H);
+        const bhref = chrome.runtime.getURL("borders.png");
+        borderImg.setAttributeNS("http://www.w3.org/1999/xlink", "href", bhref);
+        borderImg.setAttribute("href", bhref);
+        borderImg.style.display = "none";
+        svg.appendChild(borderImg);
+
         maps.appendChild(svg);
 
         // srovnat pozici po doložení layoutu (obrázky nad mřížkou posunou grid)
@@ -100,29 +119,60 @@
 
     let bordersOn = false;
 
+    // Poloprůhlednost výplně se aplikuje na SKUPINU polygonů (polyG.style.opacity),
+    // ne na jednotlivé polygony. Sousedé se schválně o ~2px překrývají (aby po
+    // zjednodušení nevznikaly mezery); kdyby byl každý polygon poloprůhledný zvlášť,
+    // v překryvu by se opacity SČÍTALA → tmavší šev. Neprůhledné polygony + jedna
+    // opacita na skupině se přes mapu složí jen jednou → výplně navazují beze švů.
+    // (Overlay hranic je MIMO skupinu, takže ho opacita výplní neztlumí.)
+    function setLayerOpacity(v) {
+        if (!polyG) return;
+        polyG.style.opacity = v == null ? "" : String(v);
+    }
+
+    const GAP_STROKE = "2";   // šířka obtažení výplně její vlastní barvou (px)
+    // Když jsou hranice VYPNUTÉ, obtáhni zemi její vlastní barvou (~1px dilatace), aby
+    // se zavřely tenké mezery po ~2–3px zdech mezi zeměmi. Překryv je neviditelný
+    // (opacita na skupině). Když jsou hranice ZAPNUTÉ, nech výplň přesnou (grow0) —
+    // overlay čar ji překryje, takže barva nikam nepřeteče přes hranici.
+    function gapStroke(p, paint) {
+        if (bordersOn) { p.style.stroke = "none"; p.style.strokeWidth = ""; }
+        else { p.style.stroke = paint; p.style.strokeWidth = GAP_STROKE; }
+    }
+
     // fill přes style (podpora rgba()/hsl()). opts: {opacity, stroke}
+    // opts.opacity nastaví opacitu skupiny výplní (ne polygonu — viz setLayerOpacity).
     function fill(id, color, opts) {
         const p = polys[id];
         if (!p) return;
         opts = opts || {};
         p.style.fill = color;
-        p.style.fillOpacity = opts.opacity == null ? "" : String(opts.opacity);
-        if (opts.stroke) p.style.stroke = opts.stroke;
-        else if (!bordersOn) p.style.stroke = "none";
+        p.style.fillOpacity = "";        // polygon neprůhledný; průhlednost řeší skupina
+        setLayerOpacity(opts.opacity);
+        if (opts.stroke) {               // spell-results: vlastní barevný obrys
+            p.style.stroke = opts.stroke;
+            p.style.strokeWidth = "";
+        } else {
+            gapStroke(p, color);         // obarvení dle vlastníka
+        }
     }
 
     function clearAll() {
         for (const id in polys) {
             polys[id].style.fill = "none";
-            if (!bordersOn) polys[id].style.stroke = "none";
+            polys[id].style.stroke = "none";
         }
     }
 
+    // Hranice = overlay skutečné sítě (borders.png), ne obtahování polygonů → jedna
+    // sdílená čára pro všechny země (i neutrály), přesně po hranici, bez zdvojení.
     function setBorders(on) {
         bordersOn = on;
+        if (borderImg) borderImg.style.display = on ? "" : "none";
+        // přepnout gap-uzavírací obtažení výplní (barva výplně; i pattern url funguje)
         for (const id in polys) {
-            polys[id].style.stroke = on ? "rgba(0,0,0,0.75)" : "none";
-            polys[id].style.strokeWidth = on ? "3" : "";   // tučnější obtažení; "" = zpět na atribut 1.4
+            const f = polys[id].style.fill;
+            if (f && f !== "none") gapStroke(polys[id], f);
         }
     }
 
@@ -170,8 +220,9 @@
         const p = polys[id];
         if (!p) return;
         p.style.fill = `url(#${stripePattern(newRgb, oldRgb)})`;
-        p.style.fillOpacity = String(FILL_OP);
-        if (!bordersOn) p.style.stroke = "none";
+        p.style.fillOpacity = "";        // neprůhledný; průhlednost řeší vrstva
+        setLayerOpacity(FILL_OP);
+        gapStroke(p, rgbStr(newRgb));    // zavři mezery barvou nového vlastníka
     }
 
     // Načtení obrázku (vlajky/erbu) pro zjištění barvy starého vlastníka, který

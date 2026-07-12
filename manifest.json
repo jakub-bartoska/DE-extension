@@ -26,7 +26,8 @@
     {
       "resources": [
         "images/menu-icon.png",
-        "regions.json"
+        "regions.json",
+        "borders.png"
       ],
       "matches": [
         "https://www.darkelf.cz/*"
