@@ -2,6 +2,14 @@
   "manifest_version": 3,
   "name": "DE-extension",
   "version": "1.0.0",
+  "description": "Nástroje pro mapu hry Dark Elf (darkelf.cz): barvení území, historie mapy a bojový mód přímo v mapě.",
+  "icons": {
+    "16": "images/icon-16.png",
+    "32": "images/icon-32.png",
+    "48": "images/icon-48.png",
+    "128": "images/icon-128.png"
+  },
+  "homepage_url": "https://github.com/jakub-bartoska/DE-extension",
   "content_scripts": [
     {
       "matches": [
