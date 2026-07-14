@@ -1,8 +1,8 @@
-# Zásady ochrany soukromí — DE-extension
+# Zásady ochrany soukromí — Dark Elf (neoficiální rozšíření funkcí)
 
 _Poslední aktualizace: 14. 7. 2026_
 
-DE-extension je pomocné rozšíření prohlížeče pro hru **Dark Elf** (darkelf.cz).
+Toto je neoficiální rozšíření prohlížeče pro hru **Dark Elf** (darkelf.cz).
 Toto je kompletní přehled toho, jak rozšíření nakládá s daty.
 
 ## Krátce
