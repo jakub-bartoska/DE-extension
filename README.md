@@ -151,9 +151,9 @@ Na mape pribyde v horni liste **druha ikona**. Po kliknuti se otevre panel:
   chybela (cernobily erb), priradi se jina, dostatecne odlisna a viditelna barva. Aliance/hrac
   se skutecnou vlastni barvou si ji udrzi, ostatni dostanou nahradu.
 - **Zvyraznit hranice** — obtahne kazdou zemi cerne, at jsou hranice jasne videt.
-- **Zvyraznit hrdiny** / **Zvyraznit krypty** — dva samostatne prepinace, ktere zarici
-  aurou zvyrazni hrdiny, resp. krypty, aby mezi ostatnimi ikonami nezanikli. **Vyraznost 1–3**
-  (1 jemne, 3 hodne napadne — pulz + zvetseni). Funguje i v historii.
+- **Zvyraznit hrdiny** a **Zvyraznit krypty** — kazdy ma vlastni prepinac vyraznosti
+  **Vyp / 1 / 2 / 3** (jako u smluv): zarici aura, aby mezi ostatnimi ikonami nezanikli.
+  1 = jemne, 3 = hodne napadne (pulz + zvetseni). Nastavuji se nezavisle, funguje i v historii.
 
 **Cerstve dobyte zeme** (ty, ktere oproti minulemu hernimu dni zmenily majitele) se
 nevybarvi jednou barvou, ale **sikmymi pruhy**: siroky pruh ma barvu **noveho** vlastnika,
