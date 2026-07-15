@@ -176,42 +176,54 @@
         }
     }
 
-    // --------------------------------------------- zvýraznění hrdinů
+    // --------------------------------------------- zvýraznění hrdinů / krypt
     //
-    // Hrdinové na mapě jsou divy s id "h<číslo>" (z-index 16); v běžné mapě mezi
-    // ikonami snadno zaniknou. Přepínač jim dá výraznou zářící auru + pulz + zvětšení,
-    // takže jsou na první pohled vidět. Zvýraznění se dělá jen CSS třídou (de-hero-hl),
-    // takže vypnutí ho čistě sundá. Hrdiny se při přepínání historie odeberou a vloží
-    // znovu → applyHeroHighlight() se volá i z reapply() (po každém přehození), aby
-    // zvýraznění zůstalo i v historických dnech.
-    let heroHlStyle = null, heroesHl = false;
+    // Hrdinové i krypty jsou na mapě divy s id "h<číslo>" (z-index 16) a mezi ostatními
+    // ikonami snadno zaniknou. Dva samostatné přepínače (hrdinové / krypty) jim dají
+    // zářící auru, silnější stupně navíc pulz + zvětšení. Výraznost 1–3 (stejně jako
+    // u smluv) — 1 jemné, 3 hodně nápadné (plná síla může být někomu moc).
+    // Rozlišení hrdiny × krypty: hrdina má odkaz na hero.asp, krypta má <img class="crypt">
+    // (odkaz cr.asp). Zvýraznění je jen CSS třída (de-hl1/2/3), takže vypnutí ho čistě
+    // sundá; applyHighlights() se volá i z reapply() (po každém přehození historie),
+    // aby zůstalo i v historických dnech.
+    let hlStyle = null, heroesHl = false, cryptsHl = false;
+    let hlIntensity = parseInt(localStorage.getItem("de-hl-intensity") || "3", 10) || 3;
 
-    function ensureHeroStyle() {
-        if (heroHlStyle) return;
-        heroHlStyle = document.createElement("style");
-        heroHlStyle.textContent =
-            "@keyframes de-hero-pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.5)}}" +
-            ".de-hero-hl{" +
-            "filter:drop-shadow(0 0 2px #fff) drop-shadow(0 0 5px #ffe100) " +
-            "drop-shadow(0 0 9px #ff7a00) brightness(1.15) saturate(1.35)!important;" +
-            "z-index:40!important;transform-origin:50% 60%;" +
-            "animation:de-hero-pulse 1.05s ease-in-out infinite!important}";
-        document.head.appendChild(heroHlStyle);
+    function ensureHlStyle() {
+        if (hlStyle) return;
+        hlStyle = document.createElement("style");
+        hlStyle.textContent =
+            "@keyframes de-hl-p2{0%,100%{transform:scale(1)}50%{transform:scale(1.2)}}" +
+            "@keyframes de-hl-p3{0%,100%{transform:scale(1)}50%{transform:scale(1.5)}}" +
+            ".de-hl1,.de-hl2,.de-hl3{z-index:40!important;transform-origin:50% 60%}" +
+            ".de-hl1{filter:drop-shadow(0 0 1px #fff) drop-shadow(0 0 3px #ffe100) brightness(1.08)!important}" +
+            ".de-hl2{filter:drop-shadow(0 0 2px #fff) drop-shadow(0 0 5px #ffe100) drop-shadow(0 0 8px #ff9a00) brightness(1.12) saturate(1.2)!important;animation:de-hl-p2 1.3s ease-in-out infinite!important}" +
+            ".de-hl3{filter:drop-shadow(0 0 2px #fff) drop-shadow(0 0 5px #ffe100) drop-shadow(0 0 9px #ff7a00) brightness(1.15) saturate(1.35)!important;animation:de-hl-p3 1.05s ease-in-out infinite!important}";
+        document.head.appendChild(hlStyle);
     }
 
-    function heroDivs() {
+    function hDivs() {
         return [...maps.querySelectorAll("div[id]")].filter((d) => /^h\d+$/.test(d.id));
     }
 
-    // (re)aplikace na aktuálně zobrazené hrdiny — volá se i po přehození historie
-    function applyHeroHighlight() {
-        for (const d of heroDivs()) d.classList.toggle("de-hero-hl", heroesHl);
+    // (re)aplikace na aktuálně zobrazené hrdiny/krypty — volá se i po přehození historie
+    function applyHighlights() {
+        ensureHlStyle();
+        const cls = "de-hl" + hlIntensity;
+        for (const d of hDivs()) {
+            d.classList.remove("de-hl1", "de-hl2", "de-hl3");
+            const isHero = !!d.querySelector('a[href*="hero.asp"]');
+            const isCrypt = !!d.querySelector("img.crypt");
+            if ((isHero && heroesHl) || (isCrypt && cryptsHl)) d.classList.add(cls);
+        }
     }
 
-    function setHeroHighlight(on) {
-        heroesHl = on;
-        ensureHeroStyle();
-        applyHeroHighlight();
+    function setHeroHighlight(on) { heroesHl = on; applyHighlights(); }
+    function setCryptHighlight(on) { cryptsHl = on; applyHighlights(); }
+    function setHlIntensity(v) {
+        hlIntensity = v || 1;
+        localStorage.setItem("de-hl-intensity", String(hlIntensity));
+        applyHighlights();
     }
 
     // ------------------------------------------- pruhované (dvoubarevné) výplně
@@ -277,8 +289,8 @@
     // reapply: znovu obarví podle aktuálně zobrazených vlastníků (po přehození
     // času v historii — vlastníci zemí se změní, barvy se musí překreslit).
     window.DEfill = {
-        fill, clearAll, setBorders, setHeroHighlight, ready,
-        reapply: () => { colorByOwner(activeMode); applyHeroHighlight(); },
+        fill, clearAll, setBorders, setHeroHighlight, setCryptHighlight, setHlIntensity, ready,
+        reapply: () => { colorByOwner(activeMode); applyHighlights(); },
         hasRegion: (id) => !!polys[id],
     };
 
@@ -518,10 +530,16 @@
             setBorders(on);
         }, false);
         panelApi.panel.appendChild(bTog.el);
-        const hTog = window.DEui.toggle("Zvýraznit hrdiny", (on) => {
-            setHeroHighlight(on);
-        }, false);
+        const hTog = window.DEui.toggle("Zvýraznit hrdiny", (on) => setHeroHighlight(on), false);
         panelApi.panel.appendChild(hTog.el);
+        const kTog = window.DEui.toggle("Zvýraznit krypty", (on) => setCryptHighlight(on), false);
+        panelApi.panel.appendChild(kTog.el);
+        const intLabel = document.createElement("span");
+        intLabel.textContent = "Výraznost";
+        const intSeg = window.DEui.segmented(
+            [["1", "1"], ["2", "2"], ["3", "3"]],
+            (v) => setHlIntensity(Number(v)), String(hlIntensity));
+        panelApi.panel.appendChild(window.DEui.row(intLabel, intSeg.el));
     }
 
     function togglePanel() {
