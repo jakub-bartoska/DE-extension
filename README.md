@@ -151,6 +151,8 @@ Na mape pribyde v horni liste **druha ikona**. Po kliknuti se otevre panel:
   chybela (cernobily erb), priradi se jina, dostatecne odlisna a viditelna barva. Aliance/hrac
   se skutecnou vlastni barvou si ji udrzi, ostatni dostanou nahradu.
 - **Zvyraznit hranice** — obtahne kazdou zemi cerne, at jsou hranice jasne videt.
+- **Zvyraznit hrdiny** — vyrazne zvyrazni vsechny hrdiny na mape (zarici aura + pulz),
+  aby mezi ostatnimi ikonami nezanikli. Funguje i v historii.
 
 **Cerstve dobyte zeme** (ty, ktere oproti minulemu hernimu dni zmenily majitele) se
 nevybarvi jednou barvou, ale **sikmymi pruhy**: siroky pruh ma barvu **noveho** vlastnika,

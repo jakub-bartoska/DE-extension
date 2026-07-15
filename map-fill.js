@@ -176,6 +176,44 @@
         }
     }
 
+    // --------------------------------------------- zvýraznění hrdinů
+    //
+    // Hrdinové na mapě jsou divy s id "h<číslo>" (z-index 16); v běžné mapě mezi
+    // ikonami snadno zaniknou. Přepínač jim dá výraznou zářící auru + pulz + zvětšení,
+    // takže jsou na první pohled vidět. Zvýraznění se dělá jen CSS třídou (de-hero-hl),
+    // takže vypnutí ho čistě sundá. Hrdiny se při přepínání historie odeberou a vloží
+    // znovu → applyHeroHighlight() se volá i z reapply() (po každém přehození), aby
+    // zvýraznění zůstalo i v historických dnech.
+    let heroHlStyle = null, heroesHl = false;
+
+    function ensureHeroStyle() {
+        if (heroHlStyle) return;
+        heroHlStyle = document.createElement("style");
+        heroHlStyle.textContent =
+            "@keyframes de-hero-pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.5)}}" +
+            ".de-hero-hl{" +
+            "filter:drop-shadow(0 0 2px #fff) drop-shadow(0 0 5px #ffe100) " +
+            "drop-shadow(0 0 9px #ff7a00) brightness(1.15) saturate(1.35)!important;" +
+            "z-index:40!important;transform-origin:50% 60%;" +
+            "animation:de-hero-pulse 1.05s ease-in-out infinite!important}";
+        document.head.appendChild(heroHlStyle);
+    }
+
+    function heroDivs() {
+        return [...maps.querySelectorAll("div[id]")].filter((d) => /^h\d+$/.test(d.id));
+    }
+
+    // (re)aplikace na aktuálně zobrazené hrdiny — volá se i po přehození historie
+    function applyHeroHighlight() {
+        for (const d of heroDivs()) d.classList.toggle("de-hero-hl", heroesHl);
+    }
+
+    function setHeroHighlight(on) {
+        heroesHl = on;
+        ensureHeroStyle();
+        applyHeroHighlight();
+    }
+
     // ------------------------------------------- pruhované (dvoubarevné) výplně
     //
     // Nově obsazená země se vykreslí šikmými pruhy: široký pruh = nový vlastník,
@@ -239,8 +277,8 @@
     // reapply: znovu obarví podle aktuálně zobrazených vlastníků (po přehození
     // času v historii — vlastníci zemí se změní, barvy se musí překreslit).
     window.DEfill = {
-        fill, clearAll, setBorders, ready,
-        reapply: () => colorByOwner(activeMode),
+        fill, clearAll, setBorders, setHeroHighlight, ready,
+        reapply: () => { colorByOwner(activeMode); applyHeroHighlight(); },
         hasRegion: (id) => !!polys[id],
     };
 
@@ -480,6 +518,10 @@
             setBorders(on);
         }, false);
         panelApi.panel.appendChild(bTog.el);
+        const hTog = window.DEui.toggle("Zvýraznit hrdiny", (on) => {
+            setHeroHighlight(on);
+        }, false);
+        panelApi.panel.appendChild(hTog.el);
     }
 
     function togglePanel() {
