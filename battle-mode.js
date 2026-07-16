@@ -279,8 +279,13 @@
   border-radius:3px;padding:0 3px;line-height:11px;box-shadow:none;white-space:nowrap;opacity:.75;pointer-events:auto;cursor:help}
 .de-bm-mlabel .mo.unknown{color:#d9c2a0;background:rgba(70,55,35,.42);border-style:dashed;border-color:rgba(200,170,120,.4);opacity:.72}
 .de-bm-mlabel.de-nl1{opacity:.72;transform:scale(.8)}
-.de-bm-mlabel.de-nl2{opacity:.9;transform:scale(.95)}
-.de-bm-mlabel.de-nl3{opacity:1;transform:scale(1.1)}`;
+.de-bm-mlabel.de-nl2{opacity:1;transform:scale(.96)}
+.de-bm-mlabel.de-nl2 .sila{background:rgba(170,22,22,.85);color:#fff;border-color:rgba(255,190,140,.5)}
+.de-bm-mlabel.de-nl2 .mo{background:rgba(34,80,178,.8);color:#eaf2ff;border-color:rgba(170,205,255,.5);opacity:1}
+.de-bm-mlabel.de-nl3{opacity:1;transform:scale(1.12)}
+.de-bm-mlabel.de-nl3 .sila{background:#e5141b;color:#fff;border:1px solid #ffdca0;box-shadow:0 0 0 1.5px rgba(0,0,0,.85),0 1px 3px rgba(0,0,0,.7);font-weight:700}
+.de-bm-mlabel.de-nl3 .mo{background:#1f5fe6;color:#fff;border:1px solid #bcd6ff;box-shadow:0 0 0 1.5px rgba(0,0,0,.8),0 1px 3px rgba(0,0,0,.55);opacity:1}
+.de-bm-mlabel.de-nl3 .mo.unknown{background:#9a6a22;color:#fff;border-color:#e8cf9a;border-style:dashed;opacity:1}`;
         doc.head.appendChild(st);
     }
 
