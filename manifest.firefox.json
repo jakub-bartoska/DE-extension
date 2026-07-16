@@ -1,0 +1,51 @@
+{
+  "manifest_version": 3,
+  "name": "Dark Elf – neoficiální rozšíření funkcí",
+  "version": "1.0.0",
+  "description": "Neoficiální rozšíření, které přidává hře Dark Elf (darkelf.cz) nové funkce: barvení mapy, historii mapy a bojový mód.",
+  "icons": {
+    "16": "images/icon-16.png",
+    "32": "images/icon-32.png",
+    "48": "images/icon-48.png",
+    "128": "images/icon-128.png"
+  },
+  "homepage_url": "https://github.com/jakub-bartoska/DE-extension",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "de-extension@jakub-bartoska.github.io",
+      "strict_min_version": "127.0"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.darkelf.cz/*"
+      ],
+      "js": [
+        "ui-kit.js",
+        "map-fill.js",
+        "spell-results.js",
+        "map-history.js",
+        "battle-mode.js",
+        "contracts-mode.js"
+      ],
+      "all_frames": true,
+      "run_at": "document_idle"
+    }
+  ],
+  "host_permissions": [
+    "https://jromqobezam5ot4ixfszrbrjhu0dyjwb.lambda-url.eu-central-1.on.aws/*"
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "images/menu-icon.png",
+        "regions.json",
+        "borders.png"
+      ],
+      "matches": [
+        "https://www.darkelf.cz/*"
+      ]
+    }
+  ]
+}
