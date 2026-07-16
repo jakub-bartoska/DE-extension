@@ -190,9 +190,6 @@
             return [c[0] || 0, c[1] || 0, c[2] || 0];
         } catch (e) { return null; }
     }
-    function atkFromArmy(z, army) {
-        return computeAtk(z, army); // vč. koeficientu hrdiny (heroStats)
-    }
 
     // PŘESNÁ útočná/obranná síla + armáda z a.asp (hra počítá vše přesně — vč.
     // vojenských smluv, pevnosti, staveb, hrdiny, obyvatel). liveStats: id -> {atk,def,army}.
@@ -309,6 +306,11 @@
 .row:hover{background:rgba(210,125,55,.15)}
 .row input{accent-color:#e0863a;width:15px;height:15px;flex:0 0 auto;cursor:pointer}
 .row .bn{flex:1}
+.seg{display:flex;gap:5px;margin:9px 0 4px}
+.seg button{flex:1;cursor:pointer;border:1px solid #6a3418;background:#3a1c0d;color:#e7c8a8;font:600 12px Arial;padding:5px 4px;border-radius:6px;transition:.1s}
+.seg button:hover{background:#4a2410;color:#fff2d8}
+.seg button.on{background:linear-gradient(180deg,#e0863a,#c2571a);border-color:#e6a050;color:#fff}
+.de-sel{width:100%;margin:4px 0;background:#3a1c0d;color:#f0e0c0;border:1px solid #6a3418;border-radius:6px;font:600 12px Arial;padding:4px 6px;cursor:pointer}
 .row .cost{font-size:11px;font-weight:bold;color:#eccb92;background:rgba(95,45,18,.55);border:1px solid #6a3418;
   border-radius:10px;padding:1px 8px;white-space:nowrap}
 .act{background:linear-gradient(180deg,#93481f,#5c2b11);color:#ffe7c2;border:1px solid #a95d2c;border-radius:8px;
@@ -327,30 +329,63 @@
 .trow input[type=range]{flex:1;accent-color:#e0863a;margin:0}
 .trow .num{min-width:30px;text-align:right;font-weight:bold;color:#ffdca0}`;
 
-    let openHost = null;
-    function closePanel() { if (openHost) { openHost.remove(); openHost = null; } }
-    function makePanel(doc, title, atX, atY) {
+    let openHost = null, panelFollowCleanup = null;
+    function closePanel() {
+        if (panelFollowCleanup) { panelFollowCleanup(); panelFollowCleanup = null; }
+        if (openHost) { openHost.remove(); openHost = null; }
+    }
+
+    // Panel je position:fixed na <body> (plně interaktivní — mapa mu nebere pointer eventy,
+    // takže posuvníky/klikání fungují). Aby přesto „zůstal u země" i při posunu mapy,
+    // sledujeme scroll #maps/okna a panel přepočítáváme podle aktuální pozice země ve
+    // viewportu (place zvolí stranu při otevření, follow ho už jen rigidně veze se zemí).
+    function makePanel(doc, title, z) {
         closePanel();
         const host = doc.createElement("section"); // <section> herní div{} pravidlo nebere
-        host.style.cssText = "position:fixed;z-index:100000;left:0;top:0";
+        host.style.cssText = "position:fixed;z-index:100000;left:-9999px;top:0;margin:0";
         const root = host.attachShadow({ mode: "open" });
         root.innerHTML = `<style>${PANEL_CSS}</style><div class="panel"><h3><span>${title}</span><span class="x">✕</span></h3><div class="body"></div></div>`;
         root.querySelector(".x").onclick = closePanel;
         doc.body.appendChild(host);
         openHost = host;
-        // umístění se dělá AŽ po naplnění obsahu (place()), aby se znalo h;
-        // u nízkého kliknutí se panel otevře NAHORU, ať spodek nezajede mimo okno.
+        const panel = root.querySelector(".panel");
+        const win = doc.defaultView;
+        let off = { dx: 8, dy: 0, right: true }; // offset panelu vůči rohu země (drží se při posunu)
+        // place() = zvolí stranu/směr podle viewportu a zapíše offset; volá se při otevření
+        // a po naplnění obsahu (kvůli výsledné výšce).
         const place = () => {
-            const win = doc.defaultView, W = win.innerWidth, H = win.innerHeight;
-            const panel = root.querySelector(".panel");
-            const w = panel.offsetWidth, h = panel.offsetHeight;
-            const left = Math.max(6, Math.min(atX, W - w - 6));
-            let top = (atY + h <= H - 6) ? atY : atY - h;      // dolů, nebo flip nahoru
-            top = Math.max(6, Math.min(top, H - h - 6));       // celý do viewportu
-            host.style.left = left + "px";
-            host.style.top = top + "px";
+            const land = doc.getElementById("x" + z.id);
+            const W = win.innerWidth, H = win.innerHeight, pw = panel.offsetWidth, ph = panel.offsetHeight;
+            if (!land) { host.style.left = Math.max(6, (W - pw) / 2) + "px"; host.style.top = "44px"; return; }
+            const r = land.getBoundingClientRect();
+            const rightFits = r.right + 8 + pw <= W - 6;
+            let left = rightFits ? (r.right + 8) : (r.left - pw - 8);
+            let top = r.top;
+            if (top + ph > H - 6) top = r.bottom - ph;       // spodek by vyjel → otevřít nahoru
+            off = { dx: left - r.left, dy: top - r.top };
+            host.style.left = Math.round(left) + "px";
+            host.style.top = Math.round(top) + "px";
+        };
+        // follow() = rigidně veze panel se zemí (stejný offset) při posunu mapy
+        const follow = () => {
+            const land = doc.getElementById("x" + z.id);
+            if (!land) return;
+            const r = land.getBoundingClientRect();
+            host.style.left = Math.round(r.left + off.dx) + "px";
+            host.style.top = Math.round(r.top + off.dy) + "px";
         };
         place();
+        const maps = doc.getElementById("maps");
+        let raf = 0;
+        const onScroll = () => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; follow(); }); };
+        win.addEventListener("scroll", onScroll, true);   // scroll okna i vnořených kontejnerů
+        if (maps) maps.addEventListener("scroll", onScroll, { passive: true });
+        win.addEventListener("resize", onScroll);
+        panelFollowCleanup = () => {
+            win.removeEventListener("scroll", onScroll, true);
+            if (maps) maps.removeEventListener("scroll", onScroll);
+            win.removeEventListener("resize", onScroll);
+        };
         return { root, body: root.querySelector(".body"), place };
     }
 
@@ -364,8 +399,8 @@
     }
 
     // ------------------------------------------------------------- STAVBY
-    async function openBuild(doc, z, ev) {
-        const { body, place } = makePanel(doc, "Stavby — " + z.zeme, ev.clientX + 10, ev.clientY - 20);
+    async function openBuild(doc, z) {
+        const { body, place } = makePanel(doc, "Stavby — " + z.zeme, z);
         body.innerHTML = '<div class="muted">Načítám…</div>';
         try {
             const d = new DOMParser().parseFromString(await decode("b.asp?id=" + z.id), "text/html");
@@ -409,7 +444,7 @@
                         body: new URLSearchParams({ id: String(z.id), CBoxVyvoj: code, Postavit: "Postavit" }).toString(),
                     });
                 }
-                setTimeout(() => openBuild(doc, z, ev), 500); // refresh nabídky
+                setTimeout(() => openBuild(doc, z), 500); // refresh nabídky
             };
             body.appendChild(btn);
             place(); // umístit až podle výsledné výšky (flip nahoru u nízkých zemí)
@@ -419,8 +454,8 @@
     }
 
     // ------------------------------------------------------------- VERBOVÁNÍ / ÚTOK (stub — doplňujeme)
-    async function openRecruit(doc, z, ev) {
-        const { body, place } = makePanel(doc, "Verbování — " + z.zeme, ev.clientX + 10, ev.clientY - 20);
+    async function openRecruit(doc, z) {
+        const { body, place } = makePanel(doc, "Verbování — " + z.zeme, z);
         body.innerHTML = '<div class="muted">Načítám…</div>';
         try {
             const d = new DOMParser().parseFromString(await decode("a.asp?id=" + z.id), "text/html");
@@ -525,8 +560,7 @@
         t.textContent = msg; doc.body.appendChild(t);
         setTimeout(() => t.remove(), 4000);
     }
-    // obarvení hranic v útočném módu: zdroj (modrá) + cíle (jantar) + u neutrálů
-    // popisek potřebné síly (min_utok) na místě vlajky.
+    // zvýraznění v útočném módu: zdroj = modrý obrys, cíle = červené šikmé šrafování.
     async function buildAttackBorders(doc, z, targets) {
         let regions;
         try { regions = await loadRegions(); } catch (e) { return; }
@@ -537,18 +571,20 @@
         svg.id = "de-bm-borders";
         svg.setAttribute("viewBox", `0 0 ${MAP_W} ${MAP_H}`);
         svg.style.cssText = `position:absolute;left:${o.x}px;top:${o.y}px;width:${MAP_W}px;height:${MAP_H}px;pointer-events:none;z-index:14;overflow:visible`;
-        const poly = (id, color) => {
+        // cíle = ČERVENÉ šikmé šrafování (pattern), zdroj = modrý obrys (navrch)
+        svg.innerHTML = '<defs><pattern id="de-bm-hatch" patternUnits="userSpaceOnUse" width="8" height="8" patternTransform="rotate(45)"><rect width="3.4" height="8" fill="rgba(226,22,26,0.82)"/></pattern></defs>';
+        const poly = (id, opts) => {
             if (!regions[id]) return;
             const p = doc.createElementNS(NS, "polygon");
             p.setAttribute("points", regions[id]);
-            p.setAttribute("fill", "none");
-            p.setAttribute("stroke", color);
-            p.setAttribute("stroke-width", "3");
+            p.setAttribute("fill", opts.fill || "none");
+            p.setAttribute("stroke", opts.stroke);
+            p.setAttribute("stroke-width", opts.sw || "3");
             p.setAttribute("stroke-linejoin", "round");
             svg.appendChild(p);
         };
-        for (const t of targets) poly(t.id, "#ffc020"); // cíle = jantar
-        poly(z.id, "#40c4ff");                           // zdroj = modrá (navrch)
+        for (const t of targets) poly(t.id, { fill: "url(#de-bm-hatch)", stroke: "#e01515", sw: "1.5" }); // cíle = červené šrafování
+        poly(z.id, { stroke: "#40c4ff", sw: "3" });      // zdroj = modrý obrys (navrch)
         maps.appendChild(svg);
         // štítky síly neutrálek (min_utok) se zapínají v panelu Zobrazení → renderNeutralInfo()
     }
@@ -557,17 +593,30 @@
         closePanel(); exitAttack(doc);
         const army = await liveArmy(z.id); // ŽIVÁ armáda (ne cache) — kvůli čerstvě naverbovaným
         if (!army || (!army[0] && !army[1] && !army[2])) { toast(doc, "V „" + z.zeme + "“ není doma žádná armáda.", "#a33"); return; }
-        let targets, heroOpts = [];
+        let targets = [], heroOpts = [];
+        const unitNames = ["1. řada", "2. řada", "3. řada"];
         try {
             const d = new DOMParser().parseFromString(await decode("utok.asp?id=" + z.id), "text/html");
             const sel = d.querySelector('select[name="cil"]');
             targets = sel ? [...sel.options].filter((o) => o.value).map((o) => ({ id: o.value, name: o.text.replace(/\s+/g, " ").trim() })) : [];
-            // hrdinové dostupní k odeslání z této země (select[name=hero]); může jich
-            // být víc, "" = bez hrdiny. Do dropdownu dáme všechny volby.
             const hSel = d.querySelector('select[name="hero"]');
             if (hSel) heroOpts = [...hSel.options].map((o) => ({ value: o.value, name: o.text.replace(/\s+/g, " ").trim() }));
+            // jména jednotek u polí T1/T2/T3 (pro popisky posuvníků). Jméno je pár řádků
+            // nad polem jako „Krajník2" (jméno+úroveň) → jdeme nahoru a bereme první slovo
+            // následované číslicí, které NENÍ okolní text (Tvou zemi brání / Odešlo / …).
+            const STOP = /^(Tvou|Odešlo|Počet|Brání|Použít|Cíl|Typ|Odeslat|Vyčistit)/i;
+            ["T1", "T2", "T3"].forEach((nm, i) => {
+                const inp = d.querySelector(`input[name="${nm}"]`);
+                let row = inp && inp.closest("tr");
+                for (let k = 0; row && k < 6; k++) {
+                    const mm = (row.textContent || "").replace(/\s+/g, " ").match(/([A-Za-zÁ-žá-ž]{3,})\d/);
+                    if (mm && !STOP.test(mm[1])) { unitNames[i] = mm[1]; break; }
+                    row = row.previousElementSibling;
+                }
+            });
         } catch (e) { toast(doc, "Nepodařilo se načíst cíle útoku.", "#a33"); return; }
         if (!targets.length) { toast(doc, "Odsud není na koho zaútočit.", "#a33"); return; }
+        try { await fetchHeroStats(doc, z.id); } catch (e) {} // ať jde dopočítat sílu s hrdinou
         const NS = "http://www.w3.org/2000/svg";
         const svg = doc.createElementNS(NS, "svg");
         svg.id = "de-bm-atksvg";
@@ -578,39 +627,11 @@
         const tip = doc.createElement("section");
         tip.style.cssText = "position:fixed;z-index:100000;background:#1a0a00;border:1px solid #7a3010;border-radius:5px;padding:3px 7px;font:bold 12px Arial;color:#fff;pointer-events:none;white-space:nowrap;display:none";
         doc.body.appendChild(tip);
-        // Volby pro tento útok: který hrdina jde s útokem (dropdown — může jich být
-        // víc, "" = bez hrdiny; default = první dostupný) a placená Pomoc rytíře.
-        const heroesAvail = heroOpts.filter((o) => o.value);
-        let heroVal = heroesAvail.length ? heroesAvail[0].value : "", buyKnight = false;
         const hint = doc.createElement("section");
-        hint.style.cssText = "position:fixed;left:50%;top:14px;transform:translateX(-50%);z-index:100000;background:#1a0a00;border:1px solid #7a3010;border-radius:6px;padding:6px 12px;font:12px Arial;color:#e7a86a;display:flex;align-items:center;gap:14px";
-        const hintTxt = doc.createElement("span");
-        hintTxt.textContent = "Útok z „" + z.zeme + "“ → najeď na cíl a klikni · Shift=plenivý · Ctrl=přesun · Esc zruší";
-        hint.appendChild(hintTxt);
-        if (heroesAvail.length) {
-            const wrap = doc.createElement("label");
-            wrap.style.cssText = "display:inline-flex;align-items:center;gap:5px;color:#f0c07a;white-space:nowrap";
-            wrap.appendChild(doc.createTextNode("Hrdina:"));
-            const hsel = doc.createElement("select");
-            hsel.style.cssText = "background:#5a1616;color:#f0e0c0;border:1px solid #7a3030;border-radius:5px;font:600 12px Arial;padding:2px 4px;cursor:pointer";
-            heroOpts.forEach((o) => {
-                const opt = doc.createElement("option");
-                opt.value = o.value; opt.textContent = o.value ? o.name : "— bez hrdiny —";
-                if (o.value === heroVal) opt.selected = true;
-                hsel.appendChild(opt);
-            });
-            hsel.addEventListener("change", () => { heroVal = hsel.value; });
-            wrap.appendChild(hsel); hint.appendChild(wrap);
-        }
-        const kl = doc.createElement("label");
-        kl.style.cssText = "display:inline-flex;align-items:center;gap:4px;cursor:pointer;color:#f0c07a;white-space:nowrap";
-        const kcb = doc.createElement("input");
-        kcb.type = "checkbox"; kcb.style.cssText = "cursor:pointer;margin:0";
-        kcb.addEventListener("change", () => { buyKnight = kcb.checked; });
-        kl.appendChild(kcb); kl.appendChild(doc.createTextNode(" Pomoc rytíře"));
-        hint.appendChild(kl);
+        hint.style.cssText = "position:fixed;left:50%;top:14px;transform:translateX(-50%);z-index:100000;background:#1a0a00;border:1px solid #7a3010;border-radius:6px;padding:6px 12px;font:12px Arial;color:#e7a86a;white-space:nowrap;pointer-events:none";
+        hint.textContent = "Útok z „" + z.zeme + "“ → najeď na cíl a klikni (pak vybereš detaily) · Esc / pravý klik zruší";
         doc.body.appendChild(hint);
-        const myAtk = atkFromArmy(z, army); // z živé armády
+        const myAtk = atkOf(z, army, heroOpts.some((o) => o.value)); // orientační: se všemi + hrdinou
         let cur = null;
         const onMove = (e) => {
             const src = centerOf(doc, z.id); if (!src) return;
@@ -629,11 +650,10 @@
                 : ` <span style="color:#aaa">útok ${myAtk}</span>`);
         };
         const onClick = (e) => {
-            if (hint.contains(e.target)) return; // klik na přepínače v liště neodesílá útok
             if (!cur) return; e.preventDefault(); e.stopPropagation();
-            const t = cur, typ = e.shiftKey ? "3" : e.ctrlKey ? "1" : "4"; // 4 dobyv., 3 plen., 1 přesun
-            const hName = (heroOpts.find((o) => o.value === heroVal) || {}).name;
-            exitAttack(doc); sendAttack(doc, z, t, army, typ, { heroId: heroVal || null, heroName: hName, buyKnight });
+            const t = cur;
+            exitAttack(doc);
+            openAttackPanel(doc, z, t, army, heroOpts, unitNames); // detaily útoku v minimenu u země
         };
         const onCtx = (e) => { e.preventDefault(); exitAttack(doc); };
         const onKey = (e) => { if (e.key === "Escape") exitAttack(doc); };
@@ -644,30 +664,98 @@
         attackState = { z, targets, svg, tip, hint, onMove, onClick, onCtx, onKey };
         buildAttackBorders(doc, z, targets); // obarvit hranice zdroje/cílů + min_utok u neutrálů
     }
+
+    // Útočná síla ze zadaných počtů jednotek; withHero = jde s útokem hrdina (bonus z heroStats).
+    function atkOf(z, counts, withHero) {
+        const r = RACE[z.id_rasa] || { atk: [0, 0, 0] };
+        let a = counts[0] * r.atk[0] + counts[1] * r.atk[1] + counts[2] * r.atk[2];
+        const h = withHero ? heroStats[z.id] : null;
+        a = Math.floor(a * (100 + (h ? h.atkPct : 0)) / 100) + (h ? h.baseAtk : 0);
+        return Math.floor(a * fortressCoef(z.img_pevnost).atk);
+    }
+
+    // Minimenu útoku UKOTVENÉ u zdrojové země: počet vojáků (default všichni), poslat
+    // hrdinu (default ano; přepočítá se síla), typ (default dobyvačný). „Odeslat útok"
+    // pošle; ✕ (nebo Zrušit) zavře tabulku i zruší celý útok.
+    const TYP_OPTS = [["4", "Dobyvačný"], ["3", "Plenivý"], ["1", "Přesun"]];
+    function openAttackPanel(doc, z, target, army, heroOpts, unitNames) {
+        const { body, place } = makePanel(doc, "Útok → " + target.name, z);
+        const heroesAvail = (heroOpts || []).filter((o) => o.value);
+        let heroOn = heroesAvail.length > 0;              // default: poslat hrdinu
+        let heroVal = heroesAvail.length ? heroesAvail[0].value : "";
+        let typ = "4";                                    // default: dobyvačný
+        const counts = [army[0], army[1], army[2]];       // default: všichni
+        const tgt = DATA.zeme.find((zz) => String(zz.id) === String(target.id));
+        const need = tgt ? tgt.min_utok : null;
+
+        const hd = doc.createElement("div"); hd.className = "hd"; body.appendChild(hd);
+        (unitNames || ["1. řada", "2. řada", "3. řada"]).forEach((nm, i) => {
+            if (!army[i]) return;                         // tier bez vojáků doma přeskoč
+            const row = doc.createElement("div"); row.className = "trow";
+            row.innerHTML = `<div class="lbl"><span>${nm} <small>doma ${army[i]}</small></span></div>
+              <div class="ctrl"><input type="range" min="0" max="${army[i]}" value="${army[i]}"><span class="num">${army[i]}</span></div>`;
+            const sl = row.querySelector("input"), num = row.querySelector(".num");
+            sl.oninput = () => { counts[i] = +sl.value; num.textContent = counts[i]; refresh(); };
+            body.appendChild(row);
+        });
+        if (heroesAvail.length) {
+            const hr = doc.createElement("label"); hr.className = "row";
+            hr.innerHTML = `<input type="checkbox" ${heroOn ? "checked" : ""}><span class="bn">Poslat hrdinu${heroesAvail.length === 1 ? " (" + heroesAvail[0].name + ")" : ""}</span>`;
+            hr.querySelector("input").onchange = (e) => { heroOn = e.target.checked; refresh(); };
+            body.appendChild(hr);
+            if (heroesAvail.length > 1) {                 // víc hrdinů → výběr kterého
+                const sel = doc.createElement("select"); sel.className = "de-sel";
+                heroesAvail.forEach((o) => { const op = doc.createElement("option"); op.value = o.value; op.textContent = o.name; sel.appendChild(op); });
+                sel.onchange = () => { heroVal = sel.value; };
+                body.appendChild(sel);
+            }
+        }
+        const seg = doc.createElement("div"); seg.className = "seg";
+        TYP_OPTS.forEach(([v, lbl]) => {
+            const b = doc.createElement("button"); b.type = "button"; b.textContent = lbl; b.dataset.v = v;
+            if (v === typ) b.classList.add("on");
+            b.onclick = () => { typ = v; seg.querySelectorAll("button").forEach((x) => x.classList.toggle("on", x.dataset.v === v)); };
+            seg.appendChild(b);
+        });
+        body.appendChild(seg);
+        const btn = doc.createElement("button"); btn.className = "act"; body.appendChild(btn);
+        function refresh() {
+            const atk = atkOf(z, counts, heroOn), tot = counts[0] + counts[1] + counts[2];
+            hd.innerHTML = `Útok <b style="color:${need != null && atk < need ? "#ff7676" : "#7bd67b"}">${atk}</b>` +
+                (need != null ? ` · třeba <b>${need}</b>` : "") + ` · vojsko <b>${tot}</b>`;
+            btn.textContent = tot ? "Odeslat útok" : "Vyber vojáky"; btn.disabled = !tot;
+        }
+        btn.onclick = () => {
+            const tot = counts[0] + counts[1] + counts[2]; if (!tot) return;
+            const hName = (heroOpts.find((o) => o.value === heroVal) || {}).name;
+            closePanel();
+            sendAttack(doc, z, target, counts.slice(), typ, { heroId: heroOn ? heroVal : null, heroName: hName });
+        };
+        refresh();
+        place(); // přepočítat pozici podle výsledné výšky panelu (flip nahoru u nízkých zemí)
+    }
     const TYP_NAME = { "4": "dobyvačný", "3": "plenivý", "1": "přesun" };
-    async function sendAttack(doc, z, target, army, typ, opts) {
+    async function sendAttack(doc, z, target, counts, typ, opts) {
         typ = typ || "4";
         opts = opts || {};
         try {
             const params = {
                 id_zeme_zdroj: String(z.id), cil: String(target.id), typ: typ,
-                T1: String(army[0]), T2: String(army[1]), T3: String(army[2]),
-                hero: opts.heroId ? String(opts.heroId) : "", // hrdina jde s útokem (když je na zemi a není odškrtnutý)
+                T1: String(counts[0]), T2: String(counts[1]), T3: String(counts[2]),
+                hero: opts.heroId ? String(opts.heroId) : "", // hrdina jde s útokem (když je zvolen)
                 odeslat: "Odeslat vojsko",
             };
-            if (opts.buyKnight) params.buy_knight = "1"; // placená „pomoc rytíře"
             const body = new URLSearchParams(params).toString();
-            const res = await decode("utok_poslat.asp", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body });
-            const okMsg = (res.match(/dorazí[^<\n]{0,40}/) || [])[0];
-            const extra = (opts.heroId ? " +" + (opts.heroName || "hrdina") : "") + (opts.buyKnight ? " +rytíř" : "");
-            toast(doc, `Útok (${TYP_NAME[typ]}) → ${target.name}${extra}` + (okMsg ? " · " + okMsg.trim() : ""), "#5a2a10");
+            await decode("utok_poslat.asp", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body });
+            const extra = opts.heroId ? " +" + (opts.heroName || "hrdina") : "";
+            toast(doc, `Útok (${TYP_NAME[typ]}) → ${target.name}${extra}`, "#5a2a10");
         } catch (e) { toast(doc, "Odeslání selhalo: " + e.message, "#a33"); }
         // optimisticky: odeslaná armáda opustila domov (map_export_json je ~2 min cachovaný)
         const zz = DATA.zeme.find((x) => x.id === z.id);
         if (zz && zz.private) {
-            zz.private.doma_war1 = Math.max(0, zz.private.doma_war1 - army[0]);
-            zz.private.doma_war2 = Math.max(0, zz.private.doma_war2 - army[1]);
-            zz.private.doma_war3 = Math.max(0, zz.private.doma_war3 - army[2]);
+            zz.private.doma_war1 = Math.max(0, zz.private.doma_war1 - counts[0]);
+            zz.private.doma_war2 = Math.max(0, zz.private.doma_war2 - counts[1]);
+            zz.private.doma_war3 = Math.max(0, zz.private.doma_war3 - counts[2]);
         }
         delete liveStats[z.id]; render(doc); // render() volá i renderArrows() → nová šipka
         Promise.all([parseAasp(z.id), fetchHeroStats(doc, z.id)]).then(([s]) => { if (s) { s.atk = computeAtk(z, s.army); liveStats[z.id] = s; render(doc); } }); // přesná síla po odeslání (útok vč. hrdiny)
@@ -702,7 +790,7 @@
             const srcId = byName[m[1].trim()];
             const tp = m[2].trim(), tgt = names.find((n) => tp.startsWith(n.name));
             if (srcId == null || !tgt) continue;
-            atks.push({ srcId, tgtId: tgt.id, typ: m[3].toLowerCase(), sila: +m[4] });
+            atks.push({ srcId, tgtId: tgt.id, tgtName: tgt.name, typ: m[3].toLowerCase(), sila: +m[4] });
         }
         if (!atks.length) return;
         const maps = doc.getElementById("maps"), NS = "http://www.w3.org/2000/svg";
@@ -743,8 +831,52 @@
             tx.setAttribute("text-anchor", "middle"); tx.setAttribute("dominant-baseline", "central");
             tx.textContent = label;
             g.appendChild(rect); g.appendChild(tx); svg.appendChild(g);
+            // ✕ zrušení útoku — vpravo nahoře u odznaku síly (klikatelné i přes pointer-events:none SVG)
+            const xcx = bx + bw / 2, xcy = by - bh / 2;
+            const xg = mk("g");
+            xg.style.cursor = "pointer"; xg.style.pointerEvents = "auto";
+            xg.setAttribute("filter", "url(#de-bm-glow)");
+            const circ = mk("circle");
+            circ.setAttribute("cx", xcx); circ.setAttribute("cy", xcy); circ.setAttribute("r", "7");
+            circ.setAttribute("fill", "#c0161c"); circ.setAttribute("stroke", "#fff"); circ.setAttribute("stroke-width", "1.3");
+            const xl = mk("path");
+            xl.setAttribute("d", `M${xcx - 3} ${xcy - 3}L${xcx + 3} ${xcy + 3}M${xcx + 3} ${xcy - 3}L${xcx - 3} ${xcy + 3}`);
+            xl.setAttribute("stroke", "#fff"); xl.setAttribute("stroke-width", "1.7"); xl.setAttribute("stroke-linecap", "round");
+            const ttl = mk("title"); ttl.textContent = "Zrušit útok → " + a.tgtName;
+            xg.appendChild(circ); xg.appendChild(xl); xg.appendChild(ttl);
+            xg.addEventListener("click", (e) => { e.stopPropagation(); e.preventDefault(); cancelAttack(doc, a); });
+            svg.appendChild(xg);
         }
         maps.appendChild(svg);
+    }
+
+    // Zrušení útoku: id útoku najdeme na utok.asp?id=<zdroj> (u pole name=zrus je v okolí
+    // text s cílem), pak POST utok_zrus.asp. Pak překreslíme šipky.
+    async function attackIdFor(srcId, tgtName) {
+        const d = new DOMParser().parseFromString(await decode("utok.asp?id=" + srcId), "text/html");
+        const inputs = [...d.querySelectorAll('input[name="zrus"]')];
+        for (const inp of inputs) {
+            let n = inp;
+            for (let k = 0; k < 6 && n; k++) {
+                n = n.parentElement;
+                const t = n ? (n.textContent || "").replace(/\s+/g, " ") : "";
+                if (t.includes(tgtName)) return inp.value;
+            }
+        }
+        return inputs.length === 1 ? inputs[0].value : null; // fallback: jediný útok z té země
+    }
+    async function cancelAttack(doc, a) {
+        try {
+            const id = await attackIdFor(a.srcId, a.tgtName);
+            if (!id) { toast(doc, "Útok k zrušení nenalezen (obnov mapu).", "#a33"); return; }
+            await fetch("utok_zrus.asp", {
+                method: "POST", credentials: "include",
+                headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                body: new URLSearchParams({ id_zeme_zdroj: String(a.srcId), zrus: String(id), cancel: "Odvolat útok" }).toString(),
+            });
+            toast(doc, "Útok zrušen → " + a.tgtName, "#5a2a10");
+        } catch (e) { toast(doc, "Zrušení selhalo: " + e.message, "#a33"); }
+        renderArrows(doc); // překreslit (zrušená šipka zmizí)
     }
 
     // ------------------------------------------------------------- render clusterů
@@ -783,8 +915,8 @@
             btns.className = "de-bm-btns";
             const defs = [
                 [IC.attack, "Poslat útok", () => startAttack(doc, z)],
-                [IC.recruit, "Verbovat", (e) => openRecruit(doc, z, e)],
-                [IC.build, "Stavby", (e) => openBuild(doc, z, e)],
+                [IC.recruit, "Verbovat", () => openRecruit(doc, z)],
+                [IC.build, "Stavby", () => openBuild(doc, z)],
             ];
             for (const [ico, tip, fn] of defs) {
                 const b = doc.createElement("div");

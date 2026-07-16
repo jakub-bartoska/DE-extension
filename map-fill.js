@@ -496,9 +496,26 @@
     // Ovládací panel staví sdílený UI kit (window.DEui) do Shadow DOM — jednotný
     // vzhled se zbytkem rozšíření a izolace od herního CSS (pravidlo `div{}`).
 
+    // Uložená nastavení (localStorage — jen lokálně, žádné oprávnění, nic se neposílá).
+    const savedMode = localStorage.getItem("de-color-mode") || "";
+    const savedBorders = localStorage.getItem("de-borders") === "1";
+
     let panelApi = null;
     const menu = document.getElementById("miniMenuContainer");
     if (menu) buildMenu();
+    restoreSettings();
+
+    // Po načtení mapy obnovit uložené zobrazení (obarvení, hranice, zvýraznění hrdinů/krypt).
+    function restoreSettings() {
+        const apply = () => {
+            applyHighlights();                          // hrdinové/krypty dle uložených úrovní
+            if (savedMode) colorByOwner(savedMode);
+            if (savedBorders) ready().then(() => setBorders(true));
+        };
+        if (document.readyState === "complete") apply();
+        else window.addEventListener("load", apply, { once: true });
+        setTimeout(apply, 1500);                         // dojistit po doložení mapy
+    }
 
     function buildMenu() {
         const btn = document.createElement("img");
@@ -518,13 +535,14 @@
         panelApi.panel.appendChild(window.DEui.title("Obarvit území podle"));
         const seg = window.DEui.segmented(
             [["hrac", "Hráčů"], ["aliance", "Aliancí"], ["", "Vypnout"]],
-            (val) => colorByOwner(val || null), "");
+            (val) => { colorByOwner(val || null); localStorage.setItem("de-color-mode", val || ""); }, savedMode);
         panelApi.panel.appendChild(seg.el);
         panelApi.panel.appendChild(window.DEui.hr());
         const bTog = window.DEui.toggle("Zvýraznit hranice", async (on) => {
             await ready();
             setBorders(on);
-        }, false);
+            localStorage.setItem("de-borders", on ? "1" : "0");
+        }, savedBorders);
         panelApi.panel.appendChild(bTog.el);
         panelApi.panel.appendChild(window.DEui.hr());
         panelApi.panel.appendChild(window.DEui.title("Zvýraznit — výraznost"));
