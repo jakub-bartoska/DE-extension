@@ -13,7 +13,10 @@
   "browser_specific_settings": {
     "gecko": {
       "id": "de-extension@jakub-bartoska.github.io",
-      "strict_min_version": "127.0"
+      "strict_min_version": "140.0",
+      "data_collection_permissions": {
+        "required": ["none"]
+      }
     }
   },
   "content_scripts": [
