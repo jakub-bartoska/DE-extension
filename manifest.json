@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Dark Elf – neoficiální rozšíření funkcí",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Neoficiální rozšíření, které přidává hře Dark Elf (darkelf.cz) nové funkce: barvení mapy, historii mapy a bojový mód.",
   "icons": {
     "16": "images/icon-16.png",
