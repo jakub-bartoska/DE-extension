@@ -528,7 +528,7 @@
                 }
                 delete liveStats[z.id]; render(doc); // starý liveStats by přebil optimistický stav
                 Promise.all([parseAasp(z.id), fetchHeroStats(doc, z.id)]).then(([s]) => { if (s) { s.atk = computeAtk(z, s.army); liveStats[z.id] = s; render(doc); } }); // přesné z a.asp + útok vč. hrdiny
-                setTimeout(() => openRecruit(doc, z, ev), 400); // panel se přenačte z živého a.asp
+                setTimeout(() => openRecruit(doc, z), 400); // panel se přenačte z živého a.asp
             };
             body.appendChild(btn);
             if (recruitable <= 0) body.insertAdjacentHTML("beforeend", '<div class="muted" style="margin-top:6px">Teď nelze verbovat (málo obyvatel vůči domům).</div>');

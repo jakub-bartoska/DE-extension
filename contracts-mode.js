@@ -60,6 +60,54 @@
     const landById = (id) => DATA.zeme.find((z) => z.id === id);
     const nameToId = (name) => { const z = DATA.zeme.find((z) => z.zeme === name); return z ? z.id : null; };
     const isMine = (id) => { const z = landById(id); return !!z && z.id_hrac === myId(); };
+    const myAli = () => DATA.hlavicka.id_aliance;
+    const hasAli = () => { const a = myAli(); return a && a !== "0" && a !== 0; }; // "0" = bez aliance
+    const isAllied = (id) => { if (!hasAli()) return false; const z = landById(id); return !!z && z.id_aliance === myAli() && z.id_hrac !== myId(); };
+    // „doma žádná armáda" — jen u vlastních/aliančních zemí (mají private data); jinak false
+    const noArmy = (id) => { const p = (landById(id) || {}).private; return !!p && ((p.doma_war1 || 0) + (p.doma_war2 || 0) + (p.doma_war3 || 0)) === 0; };
+
+    // Klasifikace hranice pro zvýraznění (sdílí render i počítadlo odznaku):
+    //   ownEmpty = žádná smlouva mezi vlastní/alianční dvojicí (přidat)
+    //   alert    = Válka, nebo Vojenská s oběma zeměmi bez armády (opravit)
+    function classifyBorder(z, it) {
+        const friendly = isMine(it.neighborId) || isAllied(it.neighborId);
+        const ownEmpty = !it.contract && friendly;
+        const alert = friendly && (it.contract === "Válka"
+            || (it.contract === "Vojenská" && noArmy(z.id) && noArmy(it.neighborId)));
+        return { ownEmpty, alert };
+    }
+    // Počet smluv „k opravě/přidání" (unikátní dvojice; může být dvojciferné).
+    function pocetZvyraznenych() {
+        if (!isPlayer() || !loaded) return 0;
+        const seen = new Set();
+        let n = 0;
+        for (const z of myLands()) for (const it of (contracts[z.id] || [])) {
+            if (!it.neighborId) continue;
+            const key = Math.min(z.id, it.neighborId) + "-" + Math.max(z.id, it.neighborId);
+            if (seen.has(key)) continue;
+            seen.add(key);
+            const c = classifyBorder(z, it);
+            if (c.ownEmpty || c.alert) n++;
+        }
+        return n;
+    }
+    // Odznak s počtem na ikoně smluv (červené kolečko; 0 = skryté; dvojčíslí širší).
+    function updateBadge(doc) {
+        const tg = doc.getElementById("de-ct-menubtn");
+        if (!tg) return;
+        const n = pocetZvyraznenych();
+        let g = tg.querySelector("#de-ct-badge");
+        if (!n) { if (g) g.remove(); return; }
+        if (!g) {
+            g = doc.createElementNS("http://www.w3.org/2000/svg", "g");
+            g.setAttribute("id", "de-ct-badge");
+            tg.appendChild(g);
+        }
+        const bw = n > 9 ? 18 : 14, bx = 47 - bw - 1;
+        g.innerHTML =
+            `<rect x="${bx}" y="0.5" width="${bw}" height="14" rx="7" fill="#e0281f" stroke="#fff" stroke-width="1.2"/>` +
+            `<text x="${bx + bw / 2}" y="8.6" fill="#fff" font-family="Arial" font-size="10.5" font-weight="bold" text-anchor="middle" dominant-baseline="middle">${n}</text>`;
+    }
 
     // Parsuje c.asp: řádek se sousedem ("Jméno [Typ...]") následovaný řádkem se
     // selectem "nabízíme:". Vrací [{neighbor, contract(name|""), offerVal}].
@@ -116,6 +164,12 @@
             const nItems = parseContracts(await decode("c.asp?id=" + item.neighborId));
             const backIdx = nItems.findIndex((x) => x.neighbor === myName);
             if (backIdx >= 0) await setOffer(item.neighborId, backIdx, newVal);
+            // Moji stranu setOffer re-readnul PŘED nastavením druhé strany → viděl ještě
+            // starou dohodnutou smlouvu. Po nastavení OBOU stran ji načteme znovu, ať
+            // contracts[landId] (a tím i počet na odznaku) sedí.
+            const mine = parseContracts(await decode("c.asp?id=" + landId));
+            mine.forEach((it) => { it.neighborId = nameToId(it.neighbor); });
+            contracts[landId] = mine;
         }
     }
 
@@ -168,7 +222,7 @@
             if (m === dT) return { x: c.x, y: by0 - pad };
             return { x: c.x, y: by1 + pad };
         }
-        function mkLine(a, b, info, ownEmpty) {
+        function mkLine(a, b, info, ownEmpty, alert) {
             const line = doc.createElementNS(NS, "line");
             line.setAttribute("x1", a.x); line.setAttribute("y1", a.y);
             line.setAttribute("x2", b.x); line.setAttribute("y2", b.y);
@@ -176,16 +230,18 @@
             if (info) { line.setAttribute("stroke", info.color); line.setAttribute("stroke-width", String(P.cLW)); line.setAttribute("opacity", String(P.cO)); }
             else if (ownEmpty) { line.setAttribute("stroke", "#ffce1f"); line.setAttribute("stroke-width", String(P.cLW)); line.setAttribute("opacity", String(P.oeO)); }
             else { line.setAttribute("stroke", "#c8c8c8"); line.setAttribute("stroke-width", String(P.eLW)); line.setAttribute("opacity", String(P.eO)); }
+            if (alert) { line.setAttribute("stroke", "#ff3030"); line.setAttribute("stroke-width", String(P.cLW + 1)); line.setAttribute("opacity", "1"); }
             svg.appendChild(line);
             return line;
         }
-        function makeChip(pos, info, ownEmpty, srcLand, item, idx, line, titleExtra) {
+        function makeChip(pos, info, ownEmpty, srcLand, item, idx, line, titleExtra, alert) {
             const chip = doc.createElement("div");
-            chip.className = "de-ct-chip " + (info ? "has" : ownEmpty ? "own-empty" : "empty");
+            chip.className = "de-ct-chip " + (info ? "has" : ownEmpty ? "own-empty" : "empty") + (alert ? " alert" : "");
             chip.style.cssText = `left:${Math.round(pos.x)}px;top:${Math.round(pos.y)}px;font-size:${P.fs}px;box-shadow:${P.sh};`
                 + (info ? `background:${info.color};opacity:${P.hasOp};` + (info.text ? `color:${info.text};` : "") : "");
             chip.textContent = info ? info.letter : "+";
-            chip.title = srcLand.zeme + " ↔ " + item.neighbor + ": " + (info ? info.label : "žádná smlouva") + (titleExtra || "") + (ownEmpty ? " — mezi vlastními, přidej!" : "");
+            chip.title = srcLand.zeme + " ↔ " + item.neighbor + ": " + (info ? info.label : "žádná smlouva") + (titleExtra || "")
+                + (ownEmpty ? " — přidej smlouvu!" : "") + (alert ? " — ⚠ oprav smlouvu!" : "");
             chip.addEventListener("click", (ev) => { ev.stopPropagation(); ev.preventDefault(); openPopup(doc, srcLand, item, idx, ev); });
             const lw = line.getAttribute("stroke-width"), lo = line.getAttribute("opacity");
             chip.addEventListener("mouseenter", () => { line.setAttribute("stroke-width", (parseFloat(lw) + 2).toString()); line.setAttribute("opacity", "1"); line.removeAttribute("stroke-dasharray"); });
@@ -200,23 +256,24 @@
                 if (!it.neighborId) return;
                 const b = centerInMaps(doc, it.neighborId); if (!b) return;
                 const info = it.contract ? TYPES[NAME2VAL[it.contract]] : null;
-                const ownEmpty = !info && isMine(it.neighborId); // prázdná mezi vlastními → zvýraznit
+                const { ownEmpty, alert } = classifyBorder(z, it); // (1) žádná (2) Válka (3) prázdná Vojenská
                 const isPortal = PORTAL_NAMES.size
                     ? (PORTAL_NAMES.has(z.zeme) && PORTAL_NAMES.has(it.neighbor))
                     : (Math.hypot(b.x - a.x, b.y - a.y) > FAR && nearEdge(a) && nearEdge(b));
                 if (isPortal) {
                     // PORTÁL: pahýl od TÉTO země k okraji + čip (bez dedup — každá země svůj)
                     const ep = edgePoint(a);
-                    makeChip(ep, info, ownEmpty, z, it, idx, mkLine(a, ep, info, ownEmpty), " (portál → " + it.neighbor + ")");
+                    makeChip(ep, info, ownEmpty, z, it, idx, mkLine(a, ep, info, ownEmpty, alert), " (portál → " + it.neighbor + ")", alert);
                 } else {
                     const key = Math.min(z.id, it.neighborId) + "-" + Math.max(z.id, it.neighborId);
                     if (seen.has(key)) return;
                     seen.add(key);
-                    makeChip({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, info, ownEmpty, z, it, idx, mkLine(a, b, info, ownEmpty));
+                    makeChip({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, info, ownEmpty, z, it, idx, mkLine(a, b, info, ownEmpty, alert), undefined, alert);
                 }
             });
         }
         maps.appendChild(svg);
+        updateBadge(doc); // po překreslení srovnat počet na odznaku
     }
 
     // ---------------------------------------------------------------- popup + loader
@@ -325,6 +382,10 @@
 #de-ct-menubtn.on .ring{stroke:#ffcf3a}
 #de-ct-menubtn.loading{pointer-events:none;cursor:progress}
 #de-ct-menubtn.loading:hover{filter:none}
+#de-ct-menubtn .pbar{display:none}
+#de-ct-menubtn.loading .pbar{display:block}
+@keyframes de-ct-pbsweep{0%{transform:translateX(0)}100%{transform:translateX(25px)}}
+#de-ct-menubtn.loading .pbar-fill{animation:de-ct-pbsweep .8s ease-in-out infinite alternate}
 .de-ct-chip{position:absolute!important;z-index:15;width:auto!important;height:auto!important;margin:0!important;
   transform:translate(-50%,-50%);min-width:13px;text-align:center;
   font:bold 10px Arial;color:#fff;background:#555;border:1px solid rgba(0,0,0,.5);
@@ -337,7 +398,10 @@
 .de-ct-chip.has:hover{opacity:1}
 /* prázdná mezi VLASTNÍMI zeměmi — příležitost na obchod, silně zvýraznit */
 @keyframes de-ct-pulse{0%,100%{box-shadow:0 0 4px 1px rgba(255,206,31,.6)}50%{box-shadow:0 0 10px 3px rgba(255,206,31,1)}}
-.de-ct-chip.own-empty{background:#ffce1f!important;color:#2a2a2a;font:700 11px Arial;border:2px solid #fff;z-index:16;padding:1px 4px;animation:de-ct-pulse 1.4s ease-in-out infinite}`;
+.de-ct-chip.own-empty{background:#ffce1f!important;color:#2a2a2a;font:700 11px Arial;border:2px solid #fff;z-index:16;padding:1px 4px;animation:de-ct-pulse 1.4s ease-in-out infinite}
+/* Válka/Vojenská mezi vlastními/aliančními, kde OBĚ země nemají doma armádu — silné varování */
+@keyframes de-ct-alert{0%,100%{box-shadow:0 0 0 2px #fff,0 0 6px 2px rgba(255,48,48,.85)}50%{box-shadow:0 0 0 2px #fff,0 0 13px 5px rgba(255,48,48,1)}}
+.de-ct-chip.alert{opacity:1!important;z-index:17!important;border:2px solid #fff;animation:de-ct-alert 1s ease-in-out infinite!important}`;
         doc.head.appendChild(st);
     }
 
@@ -354,6 +418,7 @@
 <line x1="3" y1="10" x2="16" y2="10" stroke="#a9855a" stroke-width="1.4"/>
 <line x1="3" y1="14" x2="12" y2="14" stroke="#a9855a" stroke-width="1.4"/>
 <circle cx="14" cy="20" r="3.4" fill="#c0392b" stroke="#2a1806" stroke-width="0.8"/></g>
+<g class="pbar"><rect x="6" y="30.5" width="35" height="3.6" rx="1.8" fill="#2a1806" opacity="0.85"/><rect class="pbar-fill" x="6" y="30.5" width="10" height="3.6" rx="1.8" fill="#e8b84a"/></g>
 <rect class="ring" x="1.5" y="1.5" width="44" height="35" rx="6" fill="none" stroke-width="2.5"/>`;
     function mountToggle(doc) {
         if (doc.getElementById("de-ct-menubtn")) return;
@@ -402,6 +467,7 @@
         loader.setText("Načítám data…");
         const okData = await ensureData(); // retry přes throttle
         if (!okData) { hideLoader(doc); return false; }
+        try { await fetchData(); } catch (e) {} // čerstvá armáda (doma_war) → aktuální podmínka „Vojenská + obě prázdné"
         if (!loaded) {
             loader.setText("Načítám smlouvy…");
             await loadContracts((d, t) => { loader.setText(`Načítám smlouvy… ${d}/${t}`); loader.setProgress(d, t); });
@@ -431,12 +497,24 @@
         const doc = document;
         if (!doc.getElementById("maps")) return; // jen na mapě
         injectStyle(doc);
-        mountToggle(doc);
+        mountToggle(doc);   // startuje ve stavu „loading" → progress bar na ikoně
         buildPanel(doc);
-        dataReady = true; // klikatelné hned; data se dotáhnou líně (ensureData)
+        preload(doc);       // přednačíst na pozadí, pak spočítat odznak
+    }
+
+    // Přednačtení na pozadí (jako bojový mód): dotáhne data + smlouvy s progress
+    // barem na ikoně; po dokončení tlačítko zpřístupní a přidá odznak s počtem
+    // smluv „k opravě/přidání".
+    async function preload(doc) {
+        const okData = await ensureData();
+        if (okData && !loaded) {
+            try { await loadContracts(); loaded = true; } // bar běží plynule (indeterminate) přes CSS
+            catch (e) {}
+        }
+        dataReady = true;
         const btn = doc.getElementById("de-ct-menubtn");
         if (btn) btn.classList.remove("loading");
-        ensureData(); // na pozadí, bez odstraňování tlačítka
+        updateBadge(doc);
     }
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
     else init();
