@@ -394,7 +394,9 @@
     const WANT_CAT = (name) => /UTOCN|OBRANN|PEVNOST/.test(norm(name));
 
     async function decode(url, opts) {
-        const buf = await (await fetch(url, Object.assign({ credentials: "include" }, opts))).arrayBuffer();
+        // cache:no-store — herní stránky (attacks_list/utok/a.asp/…) musí být vždy čerstvé,
+        // jinak by prohlížeč po zrušení/odeslání útoku vrátil starý stav (šipka by zůstala).
+        const buf = await (await fetch(url, Object.assign({ credentials: "include", cache: "no-store" }, opts))).arrayBuffer();
         return new TextDecoder("windows-1250").decode(buf);
     }
 
@@ -876,7 +878,8 @@
             });
             toast(doc, "Útok zrušen → " + a.tgtName, "#5a2a10");
         } catch (e) { toast(doc, "Zrušení selhalo: " + e.message, "#a33"); }
-        renderArrows(doc); // překreslit (zrušená šipka zmizí)
+        await new Promise((r) => setTimeout(r, 350)); // chvíle serveru na zpracování zrušení
+        renderArrows(doc); // překreslit z čerstvého attacks_list (zrušená šipka zmizí)
     }
 
     // ------------------------------------------------------------- render clusterů
