@@ -504,7 +504,7 @@
         const btn = document.createElement("img");
         btn.src = "../images/mapy/but_map_menu.gif";
         btn.id = "de-fill-button";
-        btn.title = "Obarvení území / hranice";
+        btn.title = "Zobrazení mapy";
         btn.width = 47; btn.height = 38;
         btn.style.cursor = "pointer";
         btn.style.filter = "hue-rotate(200deg)"; // odliš od stávající ikony
@@ -530,7 +530,7 @@
         panelApi.panel.appendChild(window.DEui.title("Zvýraznit — výraznost"));
         const hlLabel = (t) => {
             const s = document.createElement("span");
-            s.textContent = t; s.style.minWidth = "64px";
+            s.textContent = t; s.style.minWidth = "92px";
             return s;
         };
         const heroSeg = window.DEui.segmented(
@@ -541,6 +541,17 @@
             [["0", "Vyp"], ["1", "1"], ["2", "2"], ["3", "3"]],
             (v) => setCryptLevel(Number(v)), String(cryptLevel));
         panelApi.panel.appendChild(window.DEui.row(hlLabel("Krypty"), cryptSeg.el));
+
+        // Síla neutrálek (min_utok) + odhad magické obrany — data a vykreslení jsou
+        // v battle-mode (jen pro přihlášeného hráče), tady je jen ovládání výraznosti.
+        panelApi.panel.appendChild(window.DEui.hr());
+        panelApi.panel.appendChild(window.DEui.title("Bojové info"));
+        const nLevel = parseInt(localStorage.getItem("de-neutral-level") || "0", 10) || 0;
+        const nSeg = window.DEui.segmented(
+            [["0", "Vyp"], ["1", "1"], ["2", "2"], ["3", "3"]],
+            (v) => { if (window.DEbattle && window.DEbattle.setNeutralInfo) window.DEbattle.setNeutralInfo(Number(v)); },
+            String(nLevel));
+        panelApi.panel.appendChild(window.DEui.row(hlLabel("Síla neutrálek"), nSeg.el));
     }
 
     function togglePanel() {

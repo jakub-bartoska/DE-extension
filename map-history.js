@@ -248,9 +248,10 @@
     // Po přehození času překreslit obarvení podle nových vlastníků (pokud běží).
     function reapplyFill() {
         if (window.DEfill && window.DEfill.reapply) window.DEfill.reapply();
-        // Překreslit i bojový overlay — v historii skryje štítky neutrálek
-        // (nemáme historický min_utok/MO), na „Dnes" je zase zobrazí.
+        // Překreslit i bojový overlay (clustery) a štítky neutrálek — v historii se
+        // štítky skryjí (nemáme historický min_utok/MO), na „Dnes" se zase zobrazí.
         if (window.DEbattle && window.DEbattle.render) window.DEbattle.render();
+        if (window.DEbattle && window.DEbattle.reapplyNeutral) window.DEbattle.reapplyNeutral();
     }
 
     function setAttr(el, name, value) {

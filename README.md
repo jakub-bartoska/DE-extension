@@ -154,6 +154,9 @@ Na mape pribyde v horni liste **druha ikona**. Po kliknuti se otevre panel:
 - **Zvyraznit hrdiny** a **Zvyraznit krypty** — kazdy ma vlastni prepinac vyraznosti
   **Vyp / 1 / 2 / 3** (jako u smluv): zarici aura, aby mezi ostatnimi ikonami nezanikli.
   1 = jemne, 3 = hodne napadne (pulz + zvetseni). Nastavuji se nezavisle, funguje i v historii.
+- **Sila neutralek** (Vyp / 1 / 2 / 3) — u vsech neutralnich zemi ukaze **potrebnou silu
+  k dobyti** (min_utok) + odhad **magicke obrany (MO)**. Vyraznost 1–3 ovlada velikost/kryti
+  stitku. Jen pro **prihlaseneho hrace** (data z oficialniho exportu mapy).
 
 **Cerstve dobyte zeme** (ty, ktere oproti minulemu hernimu dni zmenily majitele) se
 nevybarvi jednou barvou, ale **sikmymi pruhy**: siroky pruh ma barvu **noveho** vlastnika,

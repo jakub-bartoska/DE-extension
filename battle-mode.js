@@ -201,34 +201,17 @@
         try {
             const d = new DOMParser().parseFromString(await decode("a.asp?id=" + id), "text/html");
             const rows = [...d.querySelectorAll("tr")].map((tr) => [...tr.children].map((td) => td.innerText.replace(/\s+/g, " ").trim())).filter((c) => c.join("").length);
-            // Souhrnný řádek najdi podle názvu (bez diakritiky, jako prefix) a vezmi
-            // z něj POSLEDNÍ číselnou buňku — hra tam má hodnotu dopočítanou na chlup
-            // (pevnost, stavby, hrdina, obyvatelé, vojenské smlouvy). Proto bereme
-            // obranu odsud, ne z odhadu.
-            const nrm = (s) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
-            const stat = (aliases) => {
-                for (const r of rows) {
-                    if (!r[0]) continue;
-                    const n0 = nrm(r[0]);
-                    if (!aliases.some((a) => n0.startsWith(a))) continue;
-                    for (let i = r.length - 1; i >= 1; i--) {
-                        const raw = r[i] || "";
-                        if (!/\d/.test(raw)) continue;
-                        // "14 + 12" (základ + bonus přes válku) → součet částí.
-                        // NE replace(/[^\d]/g,"") přes celé — to by dalo "1412".
-                        // Split podle "+", každá část zvlášť (mezera = tisíce → 1 číslo).
-                        return raw.split("+").reduce((a, part) => a + (parseInt(part.replace(/[^\d]/g, ""), 10) || 0), 0);
-                    }
-                }
-                return null;
-            };
-            const c = rows.filter((r) => r.length === 4 && r[0] && /^\d+$/.test(r[1]) && isCountCell(r[3])).map((r) => baseCount(r[3]));
+            // Obranu bereme rovnou z hotového herního součtu "Aktuální obrana"
+            // (hra ji počítá přesně — pevnost, stavby, hrdina, obyvatelé, smlouvy).
             // Útok NEbereme z hry ("14+12" nezapočítává % level hrdiny) — počítáme
             // ho sami z armády + hrdiny (computeAtk), viz refreshLiveStats.
-            return {
-                def: stat(["celkova obrana", "aktualni obrana", "obrana celkem"]),
-                army: [c[0] || 0, c[1] || 0, c[2] || 0],
+            const num = (label) => {
+                const r = rows.find((r) => r[0] && r[0].indexOf(label) === 0);
+                if (!r || !/\d/.test(r[1] || "")) return null;
+                return parseInt((r[1] || "").replace(/[^\d]/g, ""), 10);
             };
+            const c = rows.filter((r) => r.length === 4 && r[0] && /^\d+$/.test(r[1]) && isCountCell(r[3])).map((r) => baseCount(r[3]));
+            return { def: num("Aktuální obrana"), army: [c[0] || 0, c[1] || 0, c[2] || 0] };
         } catch (e) { return null; }
     }
     async function refreshLiveStats(doc) {
@@ -294,7 +277,10 @@
   border-radius:4px;padding:0 4px;line-height:14px;box-shadow:0 1px 1px rgba(0,0,0,.28);white-space:nowrap}
 .de-bm-mlabel .mo{font:600 8px Arial;color:#bcd2f2;background:rgba(24,54,120,.44);border:1px solid rgba(150,190,255,.28);
   border-radius:3px;padding:0 3px;line-height:11px;box-shadow:none;white-space:nowrap;opacity:.75;pointer-events:auto;cursor:help}
-.de-bm-mlabel .mo.unknown{color:#d9c2a0;background:rgba(70,55,35,.42);border-style:dashed;border-color:rgba(200,170,120,.4);opacity:.72}`;
+.de-bm-mlabel .mo.unknown{color:#d9c2a0;background:rgba(70,55,35,.42);border-style:dashed;border-color:rgba(200,170,120,.4);opacity:.72}
+.de-bm-mlabel.de-nl1{opacity:.72;transform:scale(.8)}
+.de-bm-mlabel.de-nl2{opacity:.9;transform:scale(.95)}
+.de-bm-mlabel.de-nl3{opacity:1;transform:scale(1.1)}`;
         doc.head.appendChild(st);
     }
 
@@ -518,7 +504,7 @@
         if (!attackState) return;
         const s = attackState; attackState = null;
         s.svg.remove(); s.tip.remove(); s.hint.remove();
-        doc.getElementById("de-bm-borders")?.remove(); // popisky min_utok řídí render() (zůstávají)
+        doc.getElementById("de-bm-borders")?.remove(); // štítky neutrálek řídí renderNeutralInfo() (nezávislé)
         doc.removeEventListener("mousemove", s.onMove, true);
         doc.removeEventListener("click", s.onClick, true);
         doc.removeEventListener("contextmenu", s.onCtx, true);
@@ -559,7 +545,7 @@
         for (const t of targets) poly(t.id, "#ffc020"); // cíle = jantar
         poly(z.id, "#40c4ff");                           // zdroj = modrá (navrch)
         maps.appendChild(svg);
-        // popisky min_utok na neutrálech dělá render() (na všech, ne jen cílech)
+        // štítky síly neutrálek (min_utok) se zapínají v panelu Zobrazení → renderNeutralInfo()
     }
 
     async function startAttack(doc, z) {
@@ -771,7 +757,7 @@
     function stopArrowPoll() { if (arrowPoll) { clearInterval(arrowPoll); arrowPoll = null; } }
     function render(doc) {
         renderArrows(doc); // šipky odeslaných útoků (async)
-        doc.querySelectorAll(".de-bm-cluster, .de-bm-mlabel").forEach((e) => e.remove());
+        doc.querySelectorAll(".de-bm-cluster").forEach((e) => e.remove()); // štítky neutrálek řídí renderNeutralInfo()
         if (!on || !isPlayer()) return;
         const win = doc.defaultView;
         for (const z of myLands()) {
@@ -804,13 +790,22 @@
             cl.appendChild(btns);
             land.parentElement.appendChild(cl);
         }
-        // V historii (prohlížení minulého dne) štítky neutrálek skryjeme — archiv
-        // ukládá jen sílu, historický min_utok ani MO nemáme, takže bychom ukazovali
-        // živé hodnoty přes starou mapu. Na „Dnes" se zase objeví.
+    }
+
+    // -------------------------------------------- štítky síly neutrálek (min_utok) + MO
+    // Dřív součást bojového módu; přesunuto do panelu ZOBRAZENÍ (ovládá se přes
+    // window.DEbattle.setNeutralInfo z map-fill panelu) a odpojeno od zapnutého boj. módu.
+    // Úroveň 0 = vyp, 1–3 = výraznost. Data (min_utok/MO) jsou jen pro přihlášeného hráče.
+    let neutralLevel = parseInt(localStorage.getItem("de-neutral-level") || "0", 10) || 0;
+
+    function renderNeutralInfo(doc) {
+        doc.querySelectorAll(".de-bm-mlabel").forEach((e) => e.remove());
+        if (!neutralLevel || !isPlayer() || !DATA) return;
+        // V historii skrýt — archiv nemá historický min_utok/MO, ukázali bychom živé přes starou mapu.
         if (window.DEhistory && typeof window.DEhistory.isLive === "function" && !window.DEhistory.isLive()) return;
-        // potřebná síla (min_utok) na VŠECH neutrálech, na místě vlajky.
-        // Nejdřív BATCH čtení pozic (offsetLeft/Top), pak zápis — ať to netrhá layout.
         const den = DATA.hlavicka ? DATA.hlavicka.den : null;
+        const cls = "de-nl" + neutralLevel;
+        // Nejdřív BATCH čtení pozic (offsetLeft/Top), pak zápis — ať to netrhá layout.
         const items = [];
         for (const z of DATA.zeme) {
             if (!neutralZeme(z) || z.min_utok == null) continue;
@@ -819,11 +814,10 @@
         }
         for (const it of items) {
             const lab = doc.createElement("div");
-            lab.className = "de-bm-mlabel";
+            lab.className = "de-bm-mlabel " + cls;
             lab.style.cssText = `left:${it.l}px;top:${it.t}px;width:${it.w}px;height:${it.h}px`;
-            // hlavní = síla neutrálky (červená); MO = doplňkové (menší, modré).
-            // MO je rozsah „min–max"; hover (title) ukáže procenta jednotlivých
-            // hodnot. „???" = odlogovaná neutrálka, kde MO nejde odhadnout.
+            // hlavní = síla neutrálky (červená); MO = doplňkové (menší, modré). MO je rozsah
+            // „min–max"; hover (title) ukáže procenta. „???" = odlogovaná neutrálka bez odhadu.
             lab.innerHTML = `<span class="sila">${it.m}</span>`;
             const mo = it.mo;
             if (mo) {
@@ -840,6 +834,14 @@
             }
             it.land.parentElement.appendChild(lab);
         }
+    }
+
+    // Ovládání z panelu zobrazení (map-fill). Úroveň 0–3; dotáhne data, když je třeba.
+    async function setNeutralInfo(level) {
+        neutralLevel = level || 0;
+        localStorage.setItem("de-neutral-level", String(neutralLevel));
+        if (neutralLevel && !DATA) { try { await fetchData(); } catch (e) {} }
+        renderNeutralInfo(document);
     }
 
     // ------------------------------------------------------------- přepínač v mini-menu
@@ -895,10 +897,14 @@
         if (!ok || !isPlayer()) { if (btn) btn.remove(); return; } // pozorovatel/chyba → přepínač pryč
         dataReady = true;
         if (btn) btn.classList.remove("loading"); // povolit klik, skrýt progress
+        renderNeutralInfo(doc); // obnovit štítky neutrálek, pokud jsou zapnuté (uložená úroveň)
     }
 
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
     else init();
 
-    window.DEbattle = { render: () => render(document), refresh: fetchData };
+    window.DEbattle = {
+        render: () => render(document), refresh: fetchData,
+        setNeutralInfo, reapplyNeutral: () => renderNeutralInfo(document),
+    };
 })();
