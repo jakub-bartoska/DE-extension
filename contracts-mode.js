@@ -45,10 +45,10 @@
     const contracts = {}; // landId -> [{neighbor, neighborId, contract(name|""), offerVal}]
 
     // ---------------------------------------------------------------- data
-    async function decode(url, opts) {
-        const buf = await (await fetch(url, Object.assign({ credentials: "include" }, opts))).arrayBuffer();
-        return new TextDecoder("windows-1250").decode(buf);
-    }
+    // Přes DEctx (de-context.js) — fronta + návrat session kontextu. c.asp?id=
+    // kontext přepisuje, takže bez fronty si dva požadavky lezou do zelí a hráči
+    // pak spadne verbování/stavba do cizí země. Viz hlavička de-context.js.
+    const decode = (url, opts) => window.DEctx.text(url, opts);
     async function fetchData() {
         const j = await (await fetch("map_export_json.asp", { credentials: "include" })).json();
         if (j && j.hlavicka && j.hlavicka.id_hrace && Array.isArray(j.zeme)) DATA = j;
@@ -130,34 +130,46 @@
     async function loadContracts(onProgress) {
         const lands = myLands();
         let done = 0;
-        await Promise.all(lands.map(async (z) => {
+        // Paralelně, ale UVNITŘ jedné sekce — c.asp taky renderuje podle svého ?id=
+        // (ověřeno 48/48 při plné paralelizaci), takže vadil jen vedlejší efekt na
+        // session kontextu; ten uklidí sekce návratem na konci.
+        await window.DEctx.run(() => Promise.all(lands.map(async (z) => {
             try {
                 const items = parseContracts(await decode("c.asp?id=" + z.id));
                 items.forEach((it) => { it.neighborId = nameToId(it.neighbor); });
                 contracts[z.id] = items;
             } catch (e) { contracts[z.id] = []; }
             done++; if (onProgress) onProgress(done, lands.length);
-        }));
+        })));
     }
 
     // Nastaví MOU nabídku smlouvy k sousedovi (poziční POST). Vrací aktuální stav
     // po přečtení zpět. Zdroj = session kontext (proto GET před POSTem).
     async function setOffer(landId, neighborIndex, newVal) {
-        const items = parseContracts(await decode("c.asp?id=" + landId)); // GET → kontext + počet sousedů
-        const params = new URLSearchParams();
-        items.forEach((_, i) => params.append("CBoxMojeNabidka", i === neighborIndex ? String(newVal) : "0"));
-        params.append("cbHromadneNastaveni", "0");
-        params.append("Nastav", "Nastav smlouvy");
-        await decode("smlouvy_zmena.asp", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: params.toString() });
-        const after = parseContracts(await decode("c.asp?id=" + landId)); // ověřit (POST bývá vrtkavý)
-        after.forEach((it) => { it.neighborId = nameToId(it.neighbor); });
-        contracts[landId] = after;
-        return after[neighborIndex];
+        // GET → POST → ověřovací GET musí být JEDNA sekce: mezi GET a POST se nesmí
+        // vklínit nic s ?id=, jinak by se smlouva nastavila u úplně jiné země.
+        return window.DEctx.run(async () => {
+            const items = parseContracts(await decode("c.asp?id=" + landId)); // GET → kontext + počet sousedů
+            const params = new URLSearchParams();
+            items.forEach((_, i) => params.append("CBoxMojeNabidka", i === neighborIndex ? String(newVal) : "0"));
+            params.append("cbHromadneNastaveni", "0");
+            params.append("Nastav", "Nastav smlouvy");
+            await window.DEctx.post("smlouvy_zmena.asp", params.toString());
+            const after = parseContracts(await decode("c.asp?id=" + landId)); // ověřit (POST bývá vrtkavý)
+            after.forEach((it) => { it.neighborId = nameToId(it.neighbor); });
+            contracts[landId] = after;
+            return after[neighborIndex];
+        });
     }
 
     // Změna smlouvy z popupu: nastaví moji stranu; když je soused taky můj, nastaví
     // i druhou stranu (aby smlouva mezi vlastními zeměmi platila hned).
     async function changeContract(landId, item, neighborIndex, newVal) {
+        // Celá oboustranná změna jako jedna sekce (vnořené setOffer se na ni navěsí),
+        // ať kontext neskáče mezi mojí a sousedovou zemí uprostřed operace.
+        return window.DEctx.run(() => changeContractInner(landId, item, neighborIndex, newVal));
+    }
+    async function changeContractInner(landId, item, neighborIndex, newVal) {
         await setOffer(landId, neighborIndex, newVal);
         if (isMine(item.neighborId)) {
             const myName = (landById(landId) || {}).zeme;

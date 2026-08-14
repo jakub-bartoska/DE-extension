@@ -139,6 +139,10 @@
         // a render() by kvůli !isPlayer() smazal clustery (problik → zmizí). Necháme staré.
         const j = await (await fetch("map_export_json.asp", { credentials: "include" })).json();
         if (j && j.hlavicka && j.hlavicka.id_hrace && Array.isArray(j.zeme)) DATA = j;
+        // Název země -> id pro de-context.js. Herní frame (nakup.asp) tahle data nemá,
+        // ale potřebuje z textu stránky („Vojsko <název>") poznat, které země se
+        // odesílaný formulář týká. Mapový frame je jediný, kdo je má.
+        if (DATA) window.DEctx.setNames(DATA.zeme.map((z) => ({ name: z.zeme, id: z.id })));
         return DATA;
     }
 
@@ -213,10 +217,16 @@
     }
     async function refreshLiveStats(doc) {
         if (!on || !isPlayer()) return;
-        await Promise.all(myLands().map(async (z) => {
+        // Paralelně, ale UVNITŘ jedné sekce. Čtení paralelně být smí — ověřeno, že
+        // a.asp renderuje podle svého ?id=, ne podle session (48/48 správně i při
+        // plné paralelizaci), takže data jsou v pořádku. Rozbitý byl jen vedlejší
+        // efekt na session kontextu, a ten uklidí sekce svým návratem na konci.
+        // Kratší dávka = kratší okno, kdy je kontext jinde, takže paralelně je to
+        // i bezpečnější než sekvenčně.
+        await window.DEctx.run(() => Promise.all(myLands().map(async (z) => {
             const [s] = await Promise.all([parseAasp(z.id), fetchHeroStats(doc, z.id)]);
             if (s) { s.atk = computeAtk(z, s.army); liveStats[z.id] = s; } // útok počítáme sami vč. hrdiny
-        }));
+        })));
         render(doc);
     }
 
@@ -393,12 +403,12 @@
     const norm = (s) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase();
     const WANT_CAT = (name) => /UTOCN|OBRANN|PEVNOST/.test(norm(name));
 
-    async function decode(url, opts) {
-        // cache:no-store — herní stránky (attacks_list/utok/a.asp/…) musí být vždy čerstvé,
-        // jinak by prohlížeč po zrušení/odeslání útoku vrátil starý stav (šipka by zůstala).
-        const buf = await (await fetch(url, Object.assign({ credentials: "include", cache: "no-store" }, opts))).arrayBuffer();
-        return new TextDecoder("windows-1250").decode(buf);
-    }
+    // Všechno jde přes DEctx (de-context.js) — ten drží frontu, aby si dva požadavky
+    // s ?id= nepřepsaly session kontext, a po každé sekci vrátí kontext na zemi,
+    // kterou má hráč otevřenou. Proč: viz hlavička de-context.js.
+    // cache:no-store řeší DEctx — herní stránky musí být vždy čerstvé, jinak by
+    // prohlížeč po zrušení/odeslání útoku vrátil starý stav (šipka by zůstala).
+    const decode = (url, opts) => window.DEctx.text(url, opts);
 
     // ------------------------------------------------------------- STAVBY
     async function openBuild(doc, z) {
@@ -439,13 +449,16 @@
             btn.onclick = async () => {
                 if (!picks.size) return;
                 btn.disabled = true; btn.textContent = "Stavím…";
-                for (const code of picks) {
-                    await fetch("b.asp", {
-                        method: "POST", credentials: "include",
-                        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-                        body: new URLSearchParams({ id: String(z.id), CBoxVyvoj: code, Postavit: "Postavit" }).toString(),
-                    });
-                }
+                // Celé v jedné sekci a s ČERSTVÝM GET b.asp?id= těsně před POSTy:
+                // formulář staveb `id` neposílá a server ho v POSTu ignoruje, takže
+                // cílovou zemi určuje výhradně session kontext. GET z otevření panelu
+                // je v tu chvíli klidně minutu starý a kontext už může být jinde.
+                await window.DEctx.run(async () => {
+                    await decode("b.asp?id=" + z.id);
+                    for (const code of picks) {
+                        await window.DEctx.post("b.asp", { id: String(z.id), CBoxVyvoj: code, Postavit: "Postavit" });
+                    }
+                });
                 setTimeout(() => openBuild(doc, z), 500); // refresh nabídky
             };
             body.appendChild(btn);
@@ -518,7 +531,13 @@
                 btn.disabled = true; btn.textContent = "Verbuji…";
                 const p = new URLSearchParams({ id: String(z.id), koupit2: "Vycvičit" });
                 for (let n = 1; n <= 3; n++) { const t = tiers.find((x) => x.idx === n); p.set("T" + n, String(t ? t.val : 0)); }
-                await fetch("nakup.asp", { method: "POST", credentials: "include", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: p.toString() });
+                // `id` v těle je no-op — nakup.asp ho IGNORUJE a verbuje vždy do země
+                // ze session kontextu. Proto GET a.asp?id= těsně před POSTem a obojí
+                // v jedné sekci; GET z otevření panelu je dávno neaktuální.
+                await window.DEctx.run(async () => {
+                    await decode("a.asp?id=" + z.id);
+                    await window.DEctx.post("nakup.asp", p.toString());
+                });
                 // optimistická aktualizace (map_export_json je ~2 min cachovaný → fetchData by vrátil starý stav)
                 const zz = DATA.zeme.find((x) => x.id === z.id);
                 if (zz && zz.private) {
@@ -869,13 +888,16 @@
     }
     async function cancelAttack(doc, a) {
         try {
-            const id = await attackIdFor(a.srcId, a.tgtName);
-            if (!id) { toast(doc, "Útok k zrušení nenalezen (obnov mapu).", "#a33"); return; }
-            await fetch("utok_zrus.asp", {
-                method: "POST", credentials: "include",
-                headers: { "Content-Type": "application/x-www-form-urlencoded" },
-                body: new URLSearchParams({ id_zeme_zdroj: String(a.srcId), zrus: String(id), cancel: "Odvolat útok" }).toString(),
+            // Útoky samotné na kontextu nevisí (herní formulář posílá id_zeme_zdroj),
+            // ale hledání útoku sahá na utok.asp?id= → kontext se přepne. Držíme obojí
+            // v jedné sekci, ať se mezi to nevklíní jiná dávka a kontext se pak vrátí.
+            const ok = await window.DEctx.run(async () => {
+                const id = await attackIdFor(a.srcId, a.tgtName);
+                if (!id) return false;
+                await window.DEctx.post("utok_zrus.asp", { id_zeme_zdroj: String(a.srcId), zrus: String(id), cancel: "Odvolat útok" });
+                return true;
             });
+            if (!ok) { toast(doc, "Útok k zrušení nenalezen (obnov mapu).", "#a33"); return; }
             toast(doc, "Útok zrušen → " + a.tgtName, "#5a2a10");
         } catch (e) { toast(doc, "Zrušení selhalo: " + e.message, "#a33"); }
         await new Promise((r) => setTimeout(r, 350)); // chvíle serveru na zpracování zrušení
