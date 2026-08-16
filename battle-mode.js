@@ -165,6 +165,27 @@
     const myId = () => DATA.hlavicka.id_hrace;
     const myLands = () => DATA.zeme.filter((z) => z.id_hrac === myId());
 
+    // Aktualizuje horní lištu (zlato, mana, kola) — dělá přesně to, co ikonka
+    // refresh úplně vpravo v liště: `<a href="?">` s images/s/refresh.gif v
+    // lista_informace.asp. Bez toho v ní po verbování/stavbě zůstanou staré peníze,
+    // dokud si hráč neklikne sám.
+    function refreshTopBar() {
+        try {
+            const fr = window.top.frames;
+            for (let i = 0; i < fr.length; i++) {
+                try {
+                    const d = fr[i].document;
+                    if (!d.getElementById("i1")) continue;      // to je ta lišta
+                    const a = [...d.querySelectorAll("a")].find((x) => x.querySelector('img[src*="refresh"]'));
+                    if (a) { a.click(); return true; }          // stejná cesta jako hráčův klik
+                    fr[i].location.reload();                    // záloha, kdyby ikonu přejmenovali
+                    return true;
+                } catch (e) { /* jiný origin nebo rozestavěný frame → zkusit další */ }
+            }
+        } catch (e) {}
+        return false;
+    }
+
     // zlato/mana ze sourozeneckého info framu (lista_informace: #i1 zlato, #i2 mana)
     function goldMana() {
         try {
@@ -459,6 +480,7 @@
                         await window.DEctx.post("b.asp", { id: String(z.id), CBoxVyvoj: code, Postavit: "Postavit" });
                     }
                 });
+                refreshTopBar(); // stavby stály zlato/manu → srovnat horní lištu
                 setTimeout(() => openBuild(doc, z), 500); // refresh nabídky
             };
             body.appendChild(btn);
@@ -538,6 +560,7 @@
                     await decode("a.asp?id=" + z.id);
                     await window.DEctx.post("nakup.asp", p.toString());
                 });
+                refreshTopBar(); // verbování stálo zlato → srovnat horní lištu
                 // optimistická aktualizace (map_export_json je ~2 min cachovaný → fetchData by vrátil starý stav)
                 const zz = DATA.zeme.find((x) => x.id === z.id);
                 if (zz && zz.private) {
@@ -767,7 +790,17 @@
                 odeslat: "Odeslat vojsko",
             };
             const body = new URLSearchParams(params).toString();
-            await decode("utok_poslat.asp", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body });
+            // POZOR: `utok_poslat.asp` NEJEDE jen podle `id_zeme_zdroj` v těle —
+            // potřebuje i session kontext nastavený na zdrojovou zem. (Dřív tu byl
+            // opačný předpoklad. Projevilo se to tak, že útok prošel jen tehdy, když
+            // hráč měl zrovna tu zem otevřenou.) GET `utok.asp?id=` ze `startAttack()`
+            // sice kontext nastaví, ale ten běží ve své sekci a de-context.js po ní
+            // kontext vrátí na hráčovu zem — navíc mezi výběrem vojska a klikem na
+            // „Odeslat“ uběhne klidně minuta. Proto GET+POST tady znovu a v JEDNÉ sekci.
+            await window.DEctx.run(async () => {
+                await decode("utok.asp?id=" + z.id);
+                await window.DEctx.post("utok_poslat.asp", body);
+            });
             const extra = opts.heroId ? " +" + (opts.heroName || "hrdina") : "";
             toast(doc, `Útok (${TYP_NAME[typ]}) → ${target.name}${extra}`, "#5a2a10");
         } catch (e) { toast(doc, "Odeslání selhalo: " + e.message, "#a33"); }
@@ -888,9 +921,9 @@
     }
     async function cancelAttack(doc, a) {
         try {
-            // Útoky samotné na kontextu nevisí (herní formulář posílá id_zeme_zdroj),
-            // ale hledání útoku sahá na utok.asp?id= → kontext se přepne. Držíme obojí
-            // v jedné sekci, ať se mezi to nevklíní jiná dávka a kontext se pak vrátí.
+            // Jedna sekce: `attackIdFor` sahá na utok.asp?id= (nastaví kontext na
+            // zdrojovou zem) a hned na to jde POST, který ten kontext potřebuje —
+            // formulářové `id_zeme_zdroj` na to samo nestačí (viz sendAttack).
             const ok = await window.DEctx.run(async () => {
                 const id = await attackIdFor(a.srcId, a.tgtName);
                 if (!id) return false;
