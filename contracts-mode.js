@@ -5,10 +5,20 @@
 // umístěný směrem k tomu sousedovi (u sdílené hranice). Barva + písmeno = typ
 // smlouvy. Klik na čip → popup s dropdownem na změnu (POST smlouvy_zmena.asp).
 //
-// Data: c.asp?id=<moje zem> (seznam sousedů + aktuální smlouva + nabídka).
+// ČTENÍ dat: smlouvy_export_json.asp — jedno volání pro celou mapu.
+//   - sousedi jako ID v s1..s10, smlouvy/nabídky v private.sm*/n*/p*/d*
+//   - NEsahá na session kontext země (není a/b/c/utok.asp) → čtení je zadarmo
+//     bezpečné, na rozdíl od původního N× GET c.asp. Viz de-context.js.
+//   - limit 1×/5 s, cache 2 min → po vlastní změně je JSON zastaralý.
+//   - fallback na původní parser c.asp, když API selže NEBO neprojde
+//     sebekontrola (viz verifyApi) — kódy typů smluv v API nejsou zdokumentované.
+//
+// ZÁPIS: beze změny přes c.asp + POST smlouvy_zmena.asp.
 //   - funguje jen pro VLASTNÍ země (cizí ukazují jen náhled).
 //   - selecty CBoxMojeNabidka jsou POZIČNÍ (i-tý = i-tý soused v pořadí).
 //   - zdrojová země POSTu = session kontext → před POSTem GET c.asp?id=X.
+//   - POZICI BEREME VŽDY Z ČERSTVÉHO c.asp, ne z API: kdyby s1..s10 mělo díry,
+//     poziční POST by nastavil smlouvu úplně jinému sousedovi.
 // POZOR: mapa má agresivní `div{position:absolute;39x39}` → čipy v #maps mají
 //   geometrii přebitou přes !important (stejně jako battle-mode klastry).
 // ---------------------------------------------------------------------------
@@ -17,6 +27,14 @@
 
     // typ smlouvy: value (jako v CBoxMojeNabidka) → popisek, písmeno, barva
     // barvy dle herního dropdownu smluv
+    // POZOR na „Zrušena" (5). Nastavit ji NENÍ příkaz „zruš, co tam bylo" — je to
+    // vlastní herní akce s následky, podobně jako vyhlásit válku. Ale výsledný STAV
+    // je odpad: hranice se Zrušenou je pro hráče stejně bezcenná jako prázdná, a
+    // mezi dvěma vlastními zeměmi ji chce vidět zvýrazněnou k opravě.
+    //   → v dropdownu je nastavitelná a parser ji musí umět přečíst (jinak by se
+    //     „Cesta skurutů Zrušena" načetla jako název země a čip by zmizel),
+    //   → ale v modelu ji vedeme jako PRÁZDNOU smlouvu (`empty: true`).
+    // Skutečné „nic nenabízím" je hodnota "0" (v herním dropdownu prázdná položka).
     const TYPES = {
         "6": { label: "Válka",         letter: "V",  color: "#d83a30" },
         "3": { label: "Obchodní",      letter: "O",  color: "#e8c21c", text: "#2a2a2a" },
@@ -24,11 +42,15 @@
         "1": { label: "Vojenská",      letter: "Vo", color: "#e6e6e6", text: "#2a2a2a" },
         "7": { label: "Mír",           letter: "Mí", color: "#3fa64a" },
         "4": { label: "Volný průchod", letter: "Vp", color: "#b552cc" },
+        "5": { label: "Zrušena",       letter: "Z",  color: "#8a8a8a", empty: true },
     };
-    const NAME2VAL = { "Válka": "6", "Obchodní": "3", "Magická": "2", "Vojenská": "1", "Mír": "7", "Volný průchod": "4" };
+    const NAME2VAL = { "Válka": "6", "Obchodní": "3", "Magická": "2", "Vojenská": "1", "Mír": "7", "Volný průchod": "4", "Zrušena": "5" };
     const TYPE_NAMES = Object.keys(NAME2VAL);
-    const ORDER = ["6", "3", "2", "1", "7", "4"]; // pořadí v dropdownu
-    const CANCEL = "5"; // Zrušena
+    const ORDER = ["6", "3", "2", "1", "7", "4", "5"]; // pořadí v dropdownu
+    const NONE = "0"; // „nenabízet nic" — hodnota prázdné položky herního dropdownu
+
+    // Název typu → jak ho vede model. Prázdné typy (Zrušena) = žádná smlouva.
+    const asContract = (name) => (name && !(TYPES[NAME2VAL[name]] || {}).empty) ? name : "";
 
     // Výraznost zobrazení 1–3 (na barevných mapách znázornění zaniká → jde zesílit).
     // cLW/eLW = šířka čar (smlouva/prázdná), cO/oeO/eO = jejich krytí, hasOp = krytí
@@ -69,12 +91,32 @@
     // Klasifikace hranice pro zvýraznění (sdílí render i počítadlo odznaku):
     //   ownEmpty = žádná smlouva mezi vlastní/alianční dvojicí (přidat)
     //   alert    = Válka, nebo Vojenská s oběma zeměmi bez armády (opravit)
+    //   incoming = soused mi nabízí jinou smlouvu, než jaká platí (čeká na odpověď)
+    //   expiring = smlouva dosluhuje, při přepočtu skončí (potvrdit, ať nespadne)
+    // Poslední dvě zná jen API (c.asp je neukazuje) → na fallbacku zůstanou prázdné.
     function classifyBorder(z, it) {
         const friendly = isMine(it.neighborId) || isAllied(it.neighborId);
-        const ownEmpty = !it.contract && friendly;
-        const alert = friendly && (it.contract === "Válka"
+        // Dohodnutá změna už čeká na přepočet → hráč to vyřešil, nemá co opravovat.
+        // Bez tohohle svítilo „oprav válku" i poté, co ji hráč přepnul na Obchodní:
+        // platná smlouva je do přepočtu pořád ta stará.
+        if (it.pending) return { ownEmpty: false, alert: false, incoming: false, expiring: false, pending: it.pending, transition: "", offered: false };
+        // Moje nabídka, na kterou soused ještě neodpověděl. Mezi vlastními zeměmi
+        // se dohoda uzavře hned (nastavujeme obě strany), takže tenhle stav vzniká
+        // hlavně vůči cizím a aliančním — a může viset klidně den, než to potvrdí.
+        // Dokud visí, nemá hráč co dělat → neotravovat ho výzvou k opravě.
+        const offered = !!it.offer && it.offer !== it.contract;
+        const ownEmpty = !it.contract && friendly && !offered;
+        const alert = friendly && !(offered && it.offer !== "Válka")
+            && (it.contract === "Válka"
             || (it.contract === "Vojenská" && noArmy(z.id) && noArmy(it.neighborId)));
-        return { ownEmpty, alert };
+        const incoming = !!it.incoming && it.incoming !== it.contract;
+        // Dosluhující smlouva sama o sobě NENÍ problém — obvykle je to normální
+        // přechod (Válka končí, od zítřka platí Obchodní). Vadí jen tehdy, když ji
+        // nic nenahrazuje: pak hranice zítra zůstane prázdná.
+        const expiring = !!it.expiring && !it.contract && friendly;
+        // Probíhající výměna smlouvy: dnes ještě `expiring`, od přepočtu `contract`.
+        const transition = (it.expiring && it.contract) ? it.expiring : "";
+        return { ownEmpty, alert, incoming, expiring, pending: "", transition, offered };
     }
     // Počet smluv „k opravě/přidání" (unikátní dvojice; může být dvojciferné).
     function pocetZvyraznenych() {
@@ -87,7 +129,7 @@
             if (seen.has(key)) continue;
             seen.add(key);
             const c = classifyBorder(z, it);
-            if (c.ownEmpty || c.alert) n++;
+            if (c.ownEmpty || c.alert || c.incoming || c.expiring) n++;
         }
         return n;
     }
@@ -95,6 +137,7 @@
     function updateBadge(doc) {
         const tg = doc.getElementById("de-ct-menubtn");
         if (!tg) return;
+        if (lastSource) tg.dataset.deSrc = lastSource + (apiOk === true ? " (ověřeno)" : apiOk === null ? " (neověřeno)" : "");
         const n = pocetZvyraznenych();
         let g = tg.querySelector("#de-ct-badge");
         if (!n) { if (g) g.remove(); return; }
@@ -118,16 +161,211 @@
         const items = []; let pending = null;
         for (const tr of trs) {
             const sel = tr.querySelector('select[name="CBoxMojeNabidka"]');
-            if (sel) { if (pending) { pending.offerVal = sel.value; items.push(pending); pending = null; } continue; }
+            // Select nese MOJI nabídku — díky tomu zná visící nabídku i fallback
+            // přes c.asp, ne jen API. (Sousedovu nabídku `p` umí opravdu jen API.)
+            if (sel) { if (pending) { pending.offerVal = sel.value; pending.offer = apiType(sel.value) || ""; items.push(pending); pending = null; } continue; }
             const txt = tr.innerText.replace(/\s+/g, " ").trim();
             if (!txt || /^Smlouvy|^Hromadně|^Nabídky/.test(txt)) continue;
+            // Typ se z řádku musí odříznout vždy — i „Zrušena", jinak by zůstala
+            // součástí názvu země, nedohledal by se soused a čip by na mapě chyběl.
             let name = txt, contract = "";
             for (const t of TYPE_NAMES) { const i = txt.indexOf(t); if (i > 0) { name = txt.slice(0, i).trim(); contract = t; break; } }
-            pending = { neighbor: name, contract };
+            pending = { neighbor: name, contract: asContract(contract) };
         }
         return items;
     }
+    // ------------------------------------------------------- API smluv (rychlá cesta)
+    // Jedno volání vrátí smlouvy celé mapy. Rate limit hry: 1×/5 s (při překročení
+    // vrací JSON s `retry_after`), cache 2 min.
+    const CT_API = "smlouvy_export_json.asp";
+    const API_GAP = 5200;      // vlastní odstup, ať do limitu vůbec nenarazíme
+    let apiAt = 0, apiJson = null, apiWait = null;
+    let apiOk = null;          // null = neověřeno, true/false = výsledek sebekontroly
+    let apiMiss = 0;           // kolik sebekontrol po sobě neprošlo (2 se odpouští — viz loadFromApi)
+
+    async function fetchApi(force) {
+        if (!force && apiJson && Date.now() - apiAt < 90000) return apiJson; // pod herní cache 2 min
+        if (apiWait) return apiWait;                                          // souběžná volání sdílí jeden request
+        apiWait = (async () => {
+            for (let i = 0; i < 3; i++) {
+                const gap = API_GAP - (Date.now() - apiAt);
+                if (gap > 0) await new Promise((r) => setTimeout(r, gap));
+                apiAt = Date.now();
+                try {
+                    const j = await (await fetch(CT_API, { credentials: "include", cache: "no-store" })).json();
+                    if (j && j.retry_after) { await new Promise((r) => setTimeout(r, (+j.retry_after || 5) * 1000)); continue; }
+                    const rows = j && (j.smlouvy || j.zeme);
+                    if (Array.isArray(rows) && j.hlavicka && j.hlavicka.id_hrace) { apiJson = j; return j; }
+                } catch (e) { /* další pokus */ }
+            }
+            return null;
+        })();
+        try { return await apiWait; } finally { apiWait = null; }
+    }
+
+    // Hodnota typu smlouvy z API → náš název. Kódy nejsou v nápovědě popsané,
+    // tak bereme obojí: číslo dropdownu i rovnou název. Cokoli jiného → null =
+    // „API nerozumíme", což shodí celé načtení na fallback (radši pomalu než špatně).
+    function apiType(v) {
+        if (v === null || v === undefined || v === "" || v === 0 || v === "0") return "";
+        const s = String(v).trim();
+        if (TYPES[s]) return asContract(TYPES[s].label);  // číselný kód jako v CBoxMojeNabidka
+        if (NAME2VAL[s]) return asContract(s);            // rovnou název typu
+        return null;
+    }
+
+    // Řádek API → naše položky. Vrací null, když v datech potkáme neznámý kód.
+    // Pozice v poli ODPOVÍDÁ s1..s10 bez děr, ale pro POST se stejně nepoužije
+    // (viz hlavička souboru) — identita souseda je vždy neighborId.
+    function itemsFromApi(row) {
+        const priv = row.private || null;
+        const pub = row.public || null;
+        const items = [];
+        for (let i = 1; i <= 10; i++) {
+            const nid = +row["s" + i] || 0;
+            if (!nid) continue;
+            const contract = apiType(priv ? priv["sm" + i] : null);
+            const offer = apiType(priv ? priv["n" + i] : null);
+            const incoming = apiType(priv ? priv["p" + i] : null);
+            if (contract === null || offer === null || incoming === null) return null;
+            const d = priv ? priv["d" + i] : null;
+            items.push({
+                neighbor: (landById(nid) || {}).zeme || "",
+                neighborId: nid,
+                contract,
+                offerVal: offer ? NAME2VAL[offer] : "0",
+                offer,                                               // co nabízím já
+                incoming,                                            // co nabízí soused mně
+                // Obě strany nabízejí totéž → od přepočtu tam bude tahle smlouva.
+                // Do té doby zůstává `contract` starý (např. Válka), a bez tohohle
+                // by hráč po opravě dál viděl „oprav smlouvu" u něčeho, co už opravil.
+                pending: (offer && offer === incoming && offer !== contract) ? offer : "",
+                // POZOR: `d` NENÍ příznak 0/1, ale KÓD TYPU dosluhující smlouvy.
+                // Ověřeno na živých datech: sm=3 (Obchodní) + d=6 (Válka) a c.asp
+                // u toho píše „Obchodní (platnost od zítřka)“ → dnes ještě platí
+                // Válka, od přepočtu Obchodní. `sm` je tedy ta NOVÁ smlouva.
+                expiring: apiType(d) || "",                           // název končící smlouvy, "" = nic nekončí
+                war: pub ? pub["w" + i] : null,                       // 1 vyhlášená / 0 dosluhující / null
+            });
+        }
+        return items;
+    }
+
+    // Sebekontrola: porovnáme API proti jedné reálné c.asp.
+    // Kódy typů v API nejsou zdokumentované (v testovací lize byly všechny sm/n/p/d
+    // null, takže se nedaly odpozorovat) — kdyby číslovaly jinak než dropdown, tiše
+    // bychom hráči ukazovali špatné smlouvy. Radši jeden request navíc.
+    //
+    // Vrací true = sedí, false = nesedí, **null = nebylo co porovnat**. Shoda dvou
+    // prázdných seznamů totiž o kódování nedokazuje nic; kdybychom ji brali jako
+    // důkaz, hráč bez smluv by API schválil natrvalo a první uzavřená smlouva by
+    // se pak zobrazila neověřeně. Při null zůstáváme neověření a zkusíme to znovu
+    // při dalším načtení.
+    async function verifyApi(landId, apiItems) {
+        const ref = parseContracts(await decode("c.asp?id=" + landId));
+        ref.forEach((it) => { it.neighborId = nameToId(it.neighbor); });
+        if (ref.length !== apiItems.length) return false;    // jiný počet sousedů → jiná data
+        let checked = 0, withContract = 0;
+        for (const r of ref) {
+            if (!r.neighborId) continue;                     // jméno se nepodařilo zmapovat → přeskočit
+            const a = apiItems.find((x) => x.neighborId === r.neighborId);
+            if (!a || (a.contract || "") !== (r.contract || "")) return false;
+            checked++;
+            if (a.contract || r.contract) withContract++;    // tohle už je důkaz o kódování
+        }
+        if (!checked || !withContract) return null;
+        return true;
+    }
+
+    // Odkud se naposled načetlo. Content script běží v izolovaném světě, takže
+    // z konzole stránky to jinak nezjistíš — proto se to propisuje i do
+    // data-atributu tlačítka (viz updateBadge): `data-de-src="api" | "c.asp"`.
+    let lastSource = "";
+
     async function loadContracts(onProgress) {
+        if (apiOk !== false && await loadFromApi(onProgress)) { lastSource = "api"; return; }
+        await loadFromPages(onProgress);
+        lastSource = "c.asp";
+    }
+
+    // Země, kde jsme právě měnili smlouvu, mají v API až 2 min starý stav (cache je
+    // na serveru, naše invalidace na ni nedosáhne). Držíme si je v localStorage —
+    // musí přežít reload stránky, jinak by hráč po změně a obnovení mapy uviděl
+    // původní smlouvu. Po vypršení se čtou zase z API.
+    const DIRTY_KEY = "de-ct-dirty";
+    const DIRTY_MS = 150000; // 2 min cache + rezerva
+    function dirtyMap() {
+        try {
+            const m = JSON.parse(localStorage.getItem(DIRTY_KEY) || "{}");
+            const now = Date.now(), out = {};
+            for (const k in m) if (m[k] > now) out[k] = m[k];
+            return out;
+        } catch (e) { return {}; }
+    }
+    function markDirty(landId) {
+        const m = dirtyMap();
+        m[landId] = Date.now() + DIRTY_MS;
+        try { localStorage.setItem(DIRTY_KEY, JSON.stringify(m)); } catch (e) {}
+    }
+
+    // Rychlá cesta: jedno volání API pro všechny moje země. Vrací false → fallback.
+    async function loadFromApi(onProgress) {
+        const j = await fetchApi(true);
+        if (!j) return false;
+        const rows = j.smlouvy || j.zeme || [];
+        const byId = new Map(rows.map((r) => [+r.id, r]));
+        const lands = myLands();
+        if (!lands.length) return false;
+        const built = {};
+        for (const z of lands) {
+            const row = byId.get(+z.id);
+            if (!row || !row.private) return false;   // bez privátních dat je API k ničemu
+            const items = itemsFromApi(row);
+            if (!items) return false;                 // neznámý kód typu
+            built[z.id] = items;
+        }
+        if (apiOk !== true) {
+            // Sondu NIKDY nedělat na zemi, kterou jsme právě měnili: API má 2min
+            // cache, c.asp je živá — u čerstvé změny se neshodnou z principu a
+            // nebyla by to chyba kódování.
+            const dirty = dirtyMap();
+            const cand = lands.filter((z) => !dirty[z.id]);
+            // Ověřovat na zemi, která NĚJAKOU smlouvu má — jen ta o kódování něco řekne.
+            const probe = cand.find((z) => (built[z.id] || []).some((it) => it.contract)) || cand[0];
+            if (probe) {
+                let v = null;
+                try { v = await verifyApi(probe.id, built[probe.id]); } catch (e) { v = false; }
+                if (v === false) {
+                    // Neshoda skoro vždy znamená jen zastaralé API (hráč právě něco
+                    // změnil, nebo proběhl přepočet), ne špatné kódování. Proto rychlou
+                    // cestu NEVYPÍNAT natrvalo po prvním zaškobrtnutí — tentokrát jet
+                    // přes c.asp a příště to zkusit znovu. Až když to nesedí opakovaně,
+                    // je to nejspíš doopravdy formátem.
+                    if (++apiMiss >= 3) {
+                        apiOk = false;
+                        console.warn("[DE] smlouvy_export_json opakovaně nesedí s c.asp → jedeme přes c.asp");
+                    }
+                    return false;
+                }
+                apiMiss = 0;
+                apiOk = v; // true = ověřeno; null = nebylo co porovnat, zkusíme příště znovu
+            }
+        }
+        Object.assign(contracts, built);
+        // Čerstvě měněné země dočíst z c.asp — API je na ně ještě zastaralé.
+        const dirty = dirtyMap();
+        const stale = lands.filter((z) => dirty[z.id]);
+        if (stale.length) {
+            await window.DEctx.run(() => Promise.all(stale.map(async (z) => {
+                try { mergeFromPage(z.id, parseContracts(await decode("c.asp?id=" + z.id))); } catch (e) {}
+            })));
+        }
+        if (onProgress) onProgress(lands.length, lands.length);
+        return true;
+    }
+
+    // Fallback: původní cesta — N× GET c.asp a parsování HTML.
+    async function loadFromPages(onProgress) {
         const lands = myLands();
         let done = 0;
         // Paralelně, ale UVNITŘ jedné sekce — c.asp taky renderuje podle svého ?id=
@@ -143,45 +381,72 @@
         })));
     }
 
+    // Zapsat výsledek čtení z c.asp do contracts[], ale neztratit údaje, které
+    // c.asp nezná (příchozí nabídka, dosluhování) — ty umí jen API.
+    function mergeFromPage(landId, page) {
+        const old = contracts[landId] || [];
+        page.forEach((it) => {
+            it.neighborId = nameToId(it.neighbor);
+            const prev = old.find((x) => x.neighborId === it.neighborId);
+            // c.asp tyhle údaje neumí — nese je jen API, tak je nesmíme zahodit.
+            if (prev) { it.incoming = prev.incoming; it.expiring = prev.expiring; it.war = prev.war; it.pending = prev.pending; }
+        });
+        contracts[landId] = page;
+        return page;
+    }
+
     // Nastaví MOU nabídku smlouvy k sousedovi (poziční POST). Vrací aktuální stav
     // po přečtení zpět. Zdroj = session kontext (proto GET před POSTem).
-    async function setOffer(landId, neighborIndex, newVal) {
+    //
+    // Souseda adresujeme ID, ne pořadím: pozice se bere až z ČERSTVĚ načtené c.asp.
+    // Kdyby index přišel odjinud (z API), mohl by ukazovat na jiného souseda a POST
+    // by beze slova nastavil smlouvu jinde.
+    async function setOffer(landId, neighborId, newVal) {
         // GET → POST → ověřovací GET musí být JEDNA sekce: mezi GET a POST se nesmí
         // vklínit nic s ?id=, jinak by se smlouva nastavila u úplně jiné země.
         return window.DEctx.run(async () => {
-            const items = parseContracts(await decode("c.asp?id=" + landId)); // GET → kontext + počet sousedů
+            const items = parseContracts(await decode("c.asp?id=" + landId)); // GET → kontext + pořadí sousedů
+            items.forEach((it) => { it.neighborId = nameToId(it.neighbor); });
+            const idx = items.findIndex((x) => x.neighborId === neighborId);
+            if (idx < 0) throw new Error("souseda nenalezen na c.asp");
             const params = new URLSearchParams();
-            items.forEach((_, i) => params.append("CBoxMojeNabidka", i === neighborIndex ? String(newVal) : "0"));
+            items.forEach((_, i) => params.append("CBoxMojeNabidka", i === idx ? String(newVal) : "0"));
             params.append("cbHromadneNastaveni", "0");
             params.append("Nastav", "Nastav smlouvy");
             await window.DEctx.post("smlouvy_zmena.asp", params.toString());
+            apiJson = null;                                                   // naše cache pryč…
+            markDirty(landId);                                               // …serverová 2min ale zůstává → tuhle zemi číst z c.asp
             const after = parseContracts(await decode("c.asp?id=" + landId)); // ověřit (POST bývá vrtkavý)
-            after.forEach((it) => { it.neighborId = nameToId(it.neighbor); });
-            contracts[landId] = after;
-            return after[neighborIndex];
+            mergeFromPage(landId, after);
+            return after.find((x) => x.neighborId === neighborId);
         });
     }
 
     // Změna smlouvy z popupu: nastaví moji stranu; když je soused taky můj, nastaví
     // i druhou stranu (aby smlouva mezi vlastními zeměmi platila hned).
-    async function changeContract(landId, item, neighborIndex, newVal) {
+    async function changeContract(landId, item, newVal) {
         // Celá oboustranná změna jako jedna sekce (vnořené setOffer se na ni navěsí),
         // ať kontext neskáče mezi mojí a sousedovou zemí uprostřed operace.
-        return window.DEctx.run(() => changeContractInner(landId, item, neighborIndex, newVal));
+        return window.DEctx.run(() => changeContractInner(landId, item, newVal));
     }
-    async function changeContractInner(landId, item, neighborIndex, newVal) {
-        await setOffer(landId, neighborIndex, newVal);
+    async function changeContractInner(landId, item, newVal) {
+        await setOffer(landId, item.neighborId, newVal);
         if (isMine(item.neighborId)) {
-            const myName = (landById(landId) || {}).zeme;
-            const nItems = parseContracts(await decode("c.asp?id=" + item.neighborId));
-            const backIdx = nItems.findIndex((x) => x.neighbor === myName);
-            if (backIdx >= 0) await setOffer(item.neighborId, backIdx, newVal);
+            await setOffer(item.neighborId, landId, newVal);
             // Moji stranu setOffer re-readnul PŘED nastavením druhé strany → viděl ještě
             // starou dohodnutou smlouvu. Po nastavení OBOU stran ji načteme znovu, ať
             // contracts[landId] (a tím i počet na odznaku) sedí.
-            const mine = parseContracts(await decode("c.asp?id=" + landId));
-            mine.forEach((it) => { it.neighborId = nameToId(it.neighbor); });
-            contracts[landId] = mine;
+            mergeFromPage(landId, parseContracts(await decode("c.asp?id=" + landId)));
+        }
+        // Zapsat čekající změnu rovnou, ať odznak zhasne hned po kliku. Ze zpětného
+        // čtení `c.asp` se to totiž nepozná — platná smlouva je do přepočtu stará
+        // a sousedovu nabídku (`p`) umí jen API, které má navíc 2min cache.
+        const label = TYPES[newVal] ? asContract(TYPES[newVal].label) : "";
+        const fresh = (contracts[landId] || []).find((x) => x.neighborId === item.neighborId);
+        if (fresh && label && label !== fresh.contract) {
+            // Mezi vlastními zeměmi jsme právě nastavili OBĚ strany → je dohodnuto.
+            // U cizí/alianční země jen tehdy, když soused totéž už nabízel.
+            if (isMine(item.neighborId) || fresh.incoming === label) fresh.pending = label;
         }
     }
 
@@ -246,15 +511,25 @@
             svg.appendChild(line);
             return line;
         }
-        function makeChip(pos, info, ownEmpty, srcLand, item, idx, line, titleExtra, alert) {
+        function makeChip(pos, info, srcLand, item, line, titleExtra, cls) {
+            const { ownEmpty, alert, incoming, expiring, pending, transition, offered } = cls;
             const chip = doc.createElement("div");
-            chip.className = "de-ct-chip " + (info ? "has" : ownEmpty ? "own-empty" : "empty") + (alert ? " alert" : "");
+            chip.className = "de-ct-chip " + (info ? "has" : ownEmpty ? "own-empty" : "empty")
+                + (alert ? " alert" : "") + (incoming ? " offer-in" : "") + (expiring ? " expiring" : "")
+                + (pending || transition ? " pending" : "") + (offered ? " offer-out" : "");
             chip.style.cssText = `left:${Math.round(pos.x)}px;top:${Math.round(pos.y)}px;font-size:${P.fs}px;box-shadow:${P.sh};`
                 + (info ? `background:${info.color};opacity:${P.hasOp};` + (info.text ? `color:${info.text};` : "") : "");
-            chip.textContent = info ? info.letter : "+";
+            chip.textContent = (info ? info.letter : "+") + (pending || transition ? "›" : offered ? "…" : "");
+            // U probíhající výměny ukazujeme NOVOU smlouvu (jako to dělá c.asp
+            // popiskem „platnost od zítřka“) a starou zmíníme v popisku.
             chip.title = srcLand.zeme + " ↔ " + item.neighbor + ": " + (info ? info.label : "žádná smlouva") + (titleExtra || "")
-                + (ownEmpty ? " — přidej smlouvu!" : "") + (alert ? " — ⚠ oprav smlouvu!" : "");
-            chip.addEventListener("click", (ev) => { ev.stopPropagation(); ev.preventDefault(); openPopup(doc, srcLand, item, idx, ev); });
+                + (transition ? " — dnes ještě " + transition + ", platnost od přepočtu" : "")
+                + (pending ? " — dohodnuto, od přepočtu: " + pending : "")
+                + (ownEmpty ? " — přidej smlouvu!" : "") + (alert ? " — ⚠ oprav smlouvu!" : "")
+                + (offered ? " — nabídl jsi " + item.offer + ", čeká se na souseda" : "")
+                + (incoming ? " — 📨 soused nabízí: " + item.incoming : "")
+                + (expiring ? " — ⏳ " + item.expiring + " končí přepočtem a nic ji nenahradí!" : "");
+            chip.addEventListener("click", (ev) => { ev.stopPropagation(); ev.preventDefault(); openPopup(doc, srcLand, item, ev); });
             const lw = line.getAttribute("stroke-width"), lo = line.getAttribute("opacity");
             chip.addEventListener("mouseenter", () => { line.setAttribute("stroke-width", (parseFloat(lw) + 2).toString()); line.setAttribute("opacity", "1"); line.removeAttribute("stroke-dasharray"); });
             chip.addEventListener("mouseleave", () => { line.setAttribute("stroke-width", lw); line.setAttribute("opacity", lo); line.setAttribute("stroke-dasharray", "3 4"); });
@@ -264,23 +539,24 @@
         const seen = new Set(); // dedup jen u normálních (blízkých) smluv
         for (const z of myLands()) {
             const a = centerInMaps(doc, z.id); if (!a) continue;
-            (contracts[z.id] || []).forEach((it, idx) => {
+            (contracts[z.id] || []).forEach((it) => {
                 if (!it.neighborId) return;
                 const b = centerInMaps(doc, it.neighborId); if (!b) return;
                 const info = it.contract ? TYPES[NAME2VAL[it.contract]] : null;
-                const { ownEmpty, alert } = classifyBorder(z, it); // (1) žádná (2) Válka (3) prázdná Vojenská
+                const cls = classifyBorder(z, it); // (1) žádná (2) Válka (3) prázdná Vojenská (4) nabídka (5) dosluhuje
+                const { ownEmpty, alert } = cls;
                 const isPortal = PORTAL_NAMES.size
                     ? (PORTAL_NAMES.has(z.zeme) && PORTAL_NAMES.has(it.neighbor))
                     : (Math.hypot(b.x - a.x, b.y - a.y) > FAR && nearEdge(a) && nearEdge(b));
                 if (isPortal) {
                     // PORTÁL: pahýl od TÉTO země k okraji + čip (bez dedup — každá země svůj)
                     const ep = edgePoint(a);
-                    makeChip(ep, info, ownEmpty, z, it, idx, mkLine(a, ep, info, ownEmpty, alert), " (portál → " + it.neighbor + ")", alert);
+                    makeChip(ep, info, z, it, mkLine(a, ep, info, ownEmpty, alert), " (portál → " + it.neighbor + ")", cls);
                 } else {
                     const key = Math.min(z.id, it.neighborId) + "-" + Math.max(z.id, it.neighborId);
                     if (seen.has(key)) return;
                     seen.add(key);
-                    makeChip({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, info, ownEmpty, z, it, idx, mkLine(a, b, info, ownEmpty, alert), undefined, alert);
+                    makeChip({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, info, z, it, mkLine(a, b, info, ownEmpty, alert), undefined, cls);
                 }
             });
         }
@@ -305,6 +581,7 @@
 .title{font-weight:700;color:#f0c07a;font-size:12px;margin-bottom:5px;white-space:nowrap}
 .cur{margin-bottom:8px;font-size:12px}
 .own{color:#8fc98f}
+.exp{color:#f0c060}
 .row{display:flex;gap:6px;align-items:center}
 .sel{flex:1;min-width:0;background:#5a1616;color:#f0e0c0;border:1px solid #7a3030;border-radius:5px;font:600 12px Arial;padding:3px 5px;cursor:pointer}
 .set{flex:none;cursor:pointer;border:1px solid #e6a050;border-radius:5px;background:linear-gradient(180deg,#e0842e,#c25a18);color:#fff;font:700 12px Arial;padding:4px 10px}
@@ -312,21 +589,58 @@
 .msg{margin-top:6px;font-size:11px;min-height:13px;color:#e8c8a8}
 .msg.ok{color:#8fd68f}.msg.warn{color:#f0c060}.msg.err{color:#ff8f8f}`;
 
+    // Krátká hláška u horního okraje mapy. Popup se po odeslání zavírá, takže
+    // výsledek akce potřebuje kam odejít.
+    const TOAST_CSS = `
+:host{all:initial}
+.box{position:fixed;left:50%;top:14px;transform:translateX(-50%);max-width:70vw;
+  background:linear-gradient(180deg,#3a1414,#2a0d0d);border:1px solid #7a2a24;border-radius:7px;
+  box-shadow:0 4px 14px rgba(0,0,0,.55);padding:7px 13px;font:600 12px Arial;color:#ecd9b0;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.box.ok{border-color:#4d8a4d;color:#c8f0c8}
+.box.warn{border-color:#c08a30;color:#f4dca8}`;
+
     let popup = null;
     function closePopup() { if (popup) { popup.remove(); popup = null; } }
-    function openPopup(doc, z, item, neighborIndex, ev) {
+    function toast(doc, text, ok) {
+        doc.getElementById("de-ct-toast")?.remove();
+        const { host, sh } = shadowHost(doc, TOAST_CSS);
+        host.id = "de-ct-toast";
+        host.style.cssText = "position:fixed;z-index:100003;left:0;top:0";
+        const b = doc.createElement("div");
+        b.className = "box " + (ok ? "ok" : "warn");
+        b.textContent = (ok ? "✓ " : "") + text;
+        sh.appendChild(b);
+        doc.body.appendChild(host);
+        setTimeout(() => host.remove(), 4000);
+    }
+    function openPopup(doc, z, item, ev) {
         closePopup();
         const { host, sh } = shadowHost(doc, POPUP_CSS);
         host.style.cssText = `position:fixed;z-index:100001;left:${Math.min(ev.clientX + 12, doc.documentElement.clientWidth - 232)}px;top:${ev.clientY + 12}px`;
         const curVal = item.contract ? NAME2VAL[item.contract] : "";
-        const opts = ORDER.map((v) => `<option value="${v}" style="color:${TYPES[v].color}"${v === curVal ? " selected" : ""}>${TYPES[v].label}</option>`).join("")
-            + `<option value="${CANCEL}" style="color:#999">Zrušit smlouvu</option>`;
+        const inVal = item.incoming && item.incoming !== item.contract ? NAME2VAL[item.incoming] : "";
+        // Předvybíráme sousedovu nabídku (přijmout = jeden klik), jinak platnou
+        // smlouvu, jinak „nenabízet". Prázdná položka MUSÍ být první a výchozí:
+        // dřív nebylo vybráno nic, prohlížeč ukázal první možnost — Válku — a
+        // neopatrný klik na „Nastav" tak rovnou vyhlásil válku.
+        // Když smlouva neexistuje, předvybereme to, co hráč v dané situaci skoro
+        // vždy chce: mezi vlastními/aliančními zeměmi Obchodní, na hranici s cizím
+        // Válku. (Pořadí: sousedova nabídka > platná smlouva > tenhle default.)
+        const defVal = item.contract ? ""
+            : (isMine(item.neighborId) || isAllied(item.neighborId)) ? NAME2VAL["Obchodní"] : NAME2VAL["Válka"];
+        const pick = inVal || curVal || defVal || NONE;
+        const opts = `<option value="${NONE}" style="color:#999"${pick === NONE ? " selected" : ""}>— nenabízet —</option>`
+            + ORDER.map((v) => `<option value="${v}" style="color:${TYPES[v].color}"${v === pick ? " selected" : ""}>${TYPES[v].label}</option>`).join("");
         const curInfo = item.contract ? TYPES[NAME2VAL[item.contract]] : null;
+        const inInfo = inVal ? TYPES[inVal] : null;
         const wrap = doc.createElement("div");
         wrap.className = "wrap";
         wrap.innerHTML = `
             <div class="title">${z.zeme} ↔ ${item.neighbor}</div>
-            <div class="cur">Nyní: <b${curInfo ? ` style="color:${curInfo.color}"` : ""}>${curInfo ? curInfo.label : "žádná"}</b>${isMine(item.neighborId) ? ' <span class="own">(vlastní)</span>' : ""}</div>
+            <div class="cur">Nyní: <b${curInfo ? ` style="color:${curInfo.color}"` : ""}>${curInfo ? curInfo.label : "žádná"}</b>${isMine(item.neighborId) ? ' <span class="own">(vlastní)</span>' : ""}${item.expiring ? ` <span class="exp">⏳ dnes ještě ${item.expiring}</span>` : ""}</div>
+            ${item.offer && item.offer !== item.contract ? `<div class="cur">Nabídl jsi: <b style="color:${TYPES[NAME2VAL[item.offer]].color}">${item.offer}</b> <span class="exp">— čeká na souseda</span></div>` : ""}
+            ${inInfo ? `<div class="cur">Soused nabízí: <b style="color:${inInfo.color}">${inInfo.label}</b></div>` : ""}
             <div class="row"><select class="sel">${opts}</select><button class="set">Nastav</button></div>
             <div class="msg"></div>`;
         sh.appendChild(wrap);
@@ -337,18 +651,24 @@
             const newVal = sel.value;
             btn.disabled = true; msg.textContent = "Nastavuji…"; msg.className = "msg";
             try {
-                await changeContract(z.id, item, neighborIndex, newVal);
-                const nowName = (contracts[z.id][neighborIndex] || {}).contract;
+                await changeContract(z.id, item, newVal);
+                const nowName = ((contracts[z.id] || []).find((x) => x.neighborId === item.neighborId) || {}).contract;
+                // "0" = nenabízet, "5" = Zrušena → model obojí vede jako žádnou smlouvu
+                const want = TYPES[newVal] ? asContract(TYPES[newVal].label) : "";
+                const matches = (nowName || "") === want;
+                // Zavřít a překreslit — hráč se chce dívat na mapu, ne na formulář.
+                // Výsledek by tím ale zmizel (hlavně to důležité „čeká na druhou
+                // stranu"), tak ho řekne krátká hláška nahoře.
+                closePopup();
                 render(doc);
-                const matches = (nowName || "") === (newVal === CANCEL ? "" : TYPES[newVal].label);
-                msg.textContent = matches
-                    ? "✓ " + (nowName ? TYPES[NAME2VAL[nowName]].label : "smlouva zrušena")
-                    : "Odesláno; nyní: " + (nowName ? TYPES[NAME2VAL[nowName]].label : "žádná") + " (čeká na druhou stranu)";
-                msg.className = "msg" + (matches ? " ok" : " warn");
+                toast(doc, z.zeme + " ↔ " + item.neighbor + ": "
+                    + (matches ? (nowName || "žádná smlouva")
+                               : (nowName || "žádná") + " — odesláno, čeká na druhou stranu"), matches);
             } catch (e) {
+                // Při chybě popup NEzavírat, ať ji hráč stihne přečíst.
                 msg.textContent = "Chyba: " + e.message; msg.className = "msg err";
+                btn.disabled = false;
             }
-            btn.disabled = false;
         });
     }
 
@@ -413,7 +733,18 @@
 .de-ct-chip.own-empty{background:#ffce1f!important;color:#2a2a2a;font:700 11px Arial;border:2px solid #fff;z-index:16;padding:1px 4px;animation:de-ct-pulse 1.4s ease-in-out infinite}
 /* Válka/Vojenská mezi vlastními/aliančními, kde OBĚ země nemají doma armádu — silné varování */
 @keyframes de-ct-alert{0%,100%{box-shadow:0 0 0 2px #fff,0 0 6px 2px rgba(255,48,48,.85)}50%{box-shadow:0 0 0 2px #fff,0 0 13px 5px rgba(255,48,48,1)}}
-.de-ct-chip.alert{opacity:1!important;z-index:17!important;border:2px solid #fff;animation:de-ct-alert 1s ease-in-out infinite!important}`;
+.de-ct-chip.alert{opacity:1!important;z-index:17!important;border:2px solid #fff;animation:de-ct-alert 1s ease-in-out infinite!important}
+/* soused mi nabízí jinou smlouvu, než jaká platí — čeká na odpověď (jen z API) */
+@keyframes de-ct-offer{0%,100%{box-shadow:0 0 0 2px #fff,0 0 5px 2px rgba(90,220,120,.75)}50%{box-shadow:0 0 0 2px #fff,0 0 11px 4px rgba(90,220,120,1)}}
+.de-ct-chip.offer-in{opacity:1!important;z-index:16;border:2px solid #fff;animation:de-ct-offer 1.3s ease-in-out infinite}
+.de-ct-chip.offer-in::after{content:"✉";position:absolute;right:-7px;top:-9px;font:700 10px Arial;color:#5adc78;text-shadow:0 0 2px #000,0 0 2px #000}
+/* moje nabídka visí a soused ještě neodpověděl — může to trvat i den (jen z API) */
+.de-ct-chip.offer-out{opacity:1!important;border:1px dashed #ffb03a;animation:none!important}
+/* dohodnutá změna čeká na přepočet — nechat vidět, ale neotravovat (jen z API) */
+.de-ct-chip.pending{opacity:1!important;border:1px dashed #7fd0ff;animation:none!important}
+/* smlouva dosluhuje — při nejbližším přepočtu skončí (jen z API) */
+.de-ct-chip.expiring{opacity:1!important;border-style:dashed;border-color:#ffb03a}
+.de-ct-chip.expiring::before{content:"⏳";position:absolute;left:-8px;top:-9px;font:700 10px Arial;text-shadow:0 0 2px #000,0 0 2px #000}`;
         doc.head.appendChild(st);
     }
 
