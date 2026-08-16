@@ -1,15 +1,21 @@
 # DE-extension
 
+> ### Pouzivas Safari?
+> Rozsireni je delane pro Chrome a Firefox a v Safari se takhle nainstalovat neda.
+> **Napis na Discordu Fafnerovi** — pomuze ti se zprovoznenim.
+
 Rozsireni do prohlizece pro hru **Dark Elf** (darkelf.cz). Prida na herni mapu tyto funkce:
 
 - **Barveni mapy podle kouzel** — vybarvi zeme podle odhadovane porodnosti z hlaseni tvych a spoluhracu.
 - **Historie mapy** — umozni preklikavat mapu na minule herni dny a videt, jak svet vypadal drive.
 - **Vybarveni uzemi podle vlastnika / aliance** — na prvni pohled je videt, kdo co ovlada (vcetne pruhovaneho zvyrazneni cerstve dobytych zemi).
 - **Bojovy mod** — u tvych zemi ukaze presnou utocnou/obrannou silu a umozni primo z mapy verbovat, stavet a posilat utoky.
+- **Mod smluv** — u kazde hranice mezi tvymi (a aliancnimi) zememi ukaze typ smlouvy a upozorni na to, co je potreba spravit nebo doplnit. Smlouvu jde zmenit primo z mapy.
+- **Mod kouzel** — spocita, ktera z tvych seslanych kouzel **neprojdou** pres magickou obranu cilove zeme, a rekne ti to jeste pred prepoctem — v magickem panelu i na mape.
 
 A navic drobne pomucky na strankach zemi a hlaseni (odhad obrany neutralek, odhady sil v boji).
 
-Funguje v prohlizecich zalozenych na Chromiu (Chrome, Opera, Edge, Brave, ...).
+Funguje v prohlizecich zalozenych na Chromiu (Chrome, Opera, Edge, Brave, ...) a ve **Firefoxu**.
 
 ---
 
@@ -233,6 +239,106 @@ obcerstvuje, takze zrusene i nove utoky se promitnou.
 Sila se pocita ze statu jednotek jednotlivych ras a hernich vzorcu; presne stavy (armada,
 utocna a obranna sila) se ctou zivo ze stranky zeme, protoze oficialni export je chvili
 cachovany. Po tve akci (verbovani/utok) se stav rovnou upravi, aby cisla sedela hned.
+
+Po **naverbovani** i po **postaveni** stavby se sama obnovi **horni lista** hry (zlato, mana,
+kola) — udela presne to, co klik na ikonku obnoveni uplne vpravo v liste. Drive v ni
+zustavaly stare penize, dokud sis neklikl sam.
+
+Hra si u kazde akce pamatuje "aktivni zem" ve **svem sezeni**, ne v odeslanem formulari.
+Rozsireni proto pred kazdou akci (verbovani, stavba, utok) tuhle zem znovu nastavi a hlida,
+aby si dva pozadavky nelezly do zeleho. Bez toho by se akce mohla provest v uplne jine zemi,
+nez na kterou jsi klikl.
+
+---
+
+# Funkce 5: Mod smluv
+
+Ukaze **smlouvy mezi zememi** primo na mape a hlida, co je potreba spravit.
+
+## Zapnuti
+
+V mapovem menu pribude **ikona s pergamenem**. Na ikone je **cervene kolecko s cislem** =
+kolik hranic chce tvou pozornost. Kliknutim mod zapnes.
+
+## Co uvidis
+
+Na kazde hranici tve zeme se objevi **cip** s pismenem a barvou podle typu smlouvy
+(V = valka, O = obchodni, M = magicka, Vo = vojenska, Mi = mir, Vp = volny pruchod).
+Cipy jsou spojene carou k sousedovi; u **portalovych zemi** se misto cary pres pul mapy
+nakresli kratky pahyl k okraji.
+
+Zvyrazneni:
+
+| vzhled | vyznam |
+|--------|--------|
+| zluty pulzujici `+` | mezi tvymi (nebo aliancnimi) zememi neni zadna smlouva — doplnit |
+| cerveny pulz | valka mezi tvymi zememi, nebo vojenska smlouva tam, kde ani jedna zem nema doma vojsko |
+| zelena obrys + `✉` | soused ti nabizi smlouvu a ceka na tvou odpoved |
+| oranzovy carkovany + `…` | ty jsi nabidl smlouvu a ceka se na souseda (klidne i cely den) |
+| modry carkovany + `›` | smlouva se prave meni — dnes plati stara, od prepoctu nova |
+| oranzovy carkovany + `⏳` | smlouva konci prepoctem a **nic ji nenahradi** |
+
+Do cisla na ikone se pocitaji jen veci, se kterymi **muzes neco udelat**. Kdyz uz jsi
+smlouvu opravil nebo nabidku odeslal, prestane te to honit, i kdyz stara smlouva jeste plati.
+
+## Zmena smlouvy
+
+Klik na cip otevre okenko s vyberem. Kdyz na hranici zadna smlouva neni, je predvybrana
+**obchodni** (mezi tvymi zememi) nebo **valka** (na hranici s cizim). Kdyz ti soused neco
+nabizi, je predvybrana **jeho nabidka** — prijmes ji jednim klikem.
+
+Po odeslani se okenko zavre, mapa se prekresli a nahore probliskne vysledek. Mezi **tvymi**
+zememi se smlouva nastavi na **obou stranach** naraz, takze plati hned; vuci cizimu hraci
+je to jen nabidka a ceka se, az ji potvrdi.
+
+> Pozn.: "Zrusena" je v seznamu normalni volba (je to skutecna herni akce), ale vysledny
+> stav je stejne bezcenny jako zadna smlouva — mod ji proto vede jako prazdnou hranici
+> a mezi tvymi zememi ji zvyrazni k doplneni.
+
+## Jak to funguje "pod kapotou"
+
+Smlouvy cele mapy se ctou **jednim pozadavkem** z oficialniho exportu (`smlouvy_export_json.asp`)
+misto jedne stranky na kazdou zem. Export je ale az 2 minuty cachovany, takze zem, na ktere
+jsi prave neco menil, se docte ze zive stranky hry. Kdyby export prestal odpovidat, mod
+sam prepne na cteni ze stranek — jen prijde o nabidky a dosluhovani, ktera stranka neukazuje.
+
+---
+
+# Funkce 6: Mod kouzel — co neprojde
+
+Kouzlo projde, jen kdyz je jeho **sila vetsi nez magicka obrana** cilove zeme (u pozitivnich,
+zlutych kouzel staci **polovina** obrany). Sila jednoho seslani je nahodna, proto se stava,
+ze stejne kouzlo napoprve neprojde a napodruhe ano.
+
+Tenhle mod ti **jeste pred prepoctem** rekne, ktera z tvych seslanych kouzel jsou vyhozena
+mana — at je stihnes hodit znovu.
+
+## V magickem panelu
+
+Na strance **Magie** se ke kazdemu seslanemu kouzlu pripise znacka:
+
+| znacka | vyznam |
+|--------|--------|
+| `✓` | projde |
+| `✗ prekouzleno` | neprojde, ale stejne kouzlo na tu zem uz jinde vyslo — radek se ztlumi, neni co resit |
+| `✗ NEPROJDE` (blikave) | neprojde a **zadne seslani tohohle kouzla na tuhle zem neprojde** — tohle je jedine, s cim jde jeste neco udelat |
+| `?` | nevyhodnoceno (cizi zem nebo se nepodarilo zjistit obranu) |
+
+Nad seznamem je shrnuti, kolik kouzel neprojde, kterych se to tyka a v jakem rozpeti sily
+kouzlis. V popisku kazde znacky je i vypocet (sila, potrebna hranice, magicka obrana).
+
+## Na mape
+
+V mapovem menu pribude **fialova ikona s hulkou** s cislem = kolik kouzel neprojde a neni
+prekouzlenych. Po zapnuti se u kazde tve zeme ukaze stitek s **magickou obranou** a seznamem
+kouzel, ktera na ni leti; neprochazejici blikaji cervene. V panelu se da nastavit, kolik
+radku se vejde na zem, nebo nechat zobrazit **jen to, co neprojde**.
+
+## Co mod nevidi
+
+Ukazuje **jen tva vlastni seslana kouzla** — cizi kouzla na tve zeme hra pred prepoctem
+neprozradi. A u kouzel mirenych na **cizi zem** neni znama jeji magicka obrana, takze se
+u nich nic netvrdi (`?`).
 
 ---
 

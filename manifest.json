@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Dark Elf – neoficiální rozšíření funkcí",
-  "version": "1.1.1",
-  "description": "Neoficiální rozšíření, které přidává hře Dark Elf (darkelf.cz) nové funkce: barvení mapy, historii mapy a bojový mód.",
+  "version": "1.2.0",
+  "description": "Neoficiální rozšíření, které přidává hře Dark Elf (darkelf.cz) nové funkce: barvení mapy, historii, bojový mód, smlouvy a kouzla.",
   "icons": {
     "16": "images/icon-16.png",
     "32": "images/icon-32.png",
@@ -22,7 +22,8 @@
         "spell-results.js",
         "map-history.js",
         "battle-mode.js",
-        "contracts-mode.js"
+        "contracts-mode.js",
+        "spells-mode.js"
       ],
       "all_frames": true,
       "run_at": "document_idle"
