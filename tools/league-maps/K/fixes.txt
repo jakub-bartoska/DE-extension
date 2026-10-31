@@ -1,0 +1,65 @@
+# Ruční opravy mapy K ligy (souřadnice v pixelech mřížky 2244×1542)
+# seed <id> <x> <y>  … další kus země (např. druhý břeh řeky)
+# void <x> <y>       … místo, které nepatří žádné zemi
+seed 7277 1256 553   # Hradec Králové – východní břeh
+seed 7335 1994 747   # Ostrava – druhý břeh
+seed 7133 497 506    # Žatec – jižní břeh
+seed 7260 711 616    # Pražský hrad – hradní návrší
+# Pražský hrad: tlačítko země přesahuje mimo zem → semínko doprostřed návrší;
+move 7260 700 600
+# severní hranice podle taktické mapy, přes věže katedrály rovně
+line 655 579 662 578 665 574 668 572 677 572 683 567 686 565 694 564 697 566 705 566 708 564 711 561 719 561 731 556 744 556 750 558 762 558
+seed 7137 740 260    # Děčín – východní břeh
+seed 7260 690 572    # Pražský hrad – pruh pod severní hranicí (nad střechou)
+seed 7260 742 580    # Pražský hrad – pod kostelem u řeky
+seed 7260 746 574    # Pražský hrad – roh kostela (okna se pletou s řekou)
+seed 7135 573 460    # Louny – plocha severně od řeky
+
+# Hranice, které přeskakovaly čáry taktické mapy → v obdélníku jsou čáry zdí
+hardbox 640 595 781 650   # Pražský hrad / Levý Hradec, Malá Strana
+seed 7260 667 620         # Pražský hrad – západní část kopce pod hradem
+hardbox 650 600 743 714   # Malá Strana / Levý Hradec
+seed 7258 680 650         # Malá Strana – západní hradba
+hardbox 755 635 889 720   # Vyšehrad / Jílové
+lineowner 785 650 875 720 7266 7267  # Vyšehrad / Jílové – hranice po jižním okraji čáry
+seed 7266 795 690         # Vyšehrad – zlatý portál
+hardbox 340 700 474 769   # Plasy / Plzeň
+seed 7239 400 740         # Plzeň – trojúhelník pod hranicí ve tvaru „V“
+seed 7239 423 745         # Plzeň – výběžek „U“ Plas mezi dvěma částmi Plzně
+hardbox 758 535 853 587   # Staré Město / Mělník
+hardbox 848 565 907 645   # Staré Město / Kolín
+seed 7265 880 605         # Staré Město – trojúhelník západně od hraniční čáry
+seed 7265 892 602         # Staré Město – malý výběžek u čáry
+hardbox 404 1305 579 1371 # Pasov / Rinchnach
+seed 7368 580 1310        # Pasov – průsmyk mezi horami k Helfenburku
+seed 7368 545 1325
+hardbox 538 1240 600 1300 # Pasov / Helfenburk – čára mezi horami
+# Pasov / Helfenburk: hranice je šikmá čára (548,1266) → (574,1310) mezi horami;
+# území mezi ní a řekou patří Helfenburku
+line 548 1266 552 1273 553 1280 556 1288 559 1293 564 1300 568 1304 574 1310
+seed 7373 565 1262        # Helfenburk – klín pod horou
+seed 7373 568 1285        # Helfenburk – mezi čárou a řekou
+seed 7373 578 1300
+line 549 1251 548 1266    # Pasov / Rinchnach – chybějící kus čáry v horách
+seed 7368 505 1340        # Pasov – kus pod vodorovnou čárou (dřív výběžek „L“ Rinchnachu)
+seed 7368 498 1333
+hardbox 2130 215 2221 295 # Radomsko / Dankow
+seed 7215 2168 252        # Dankow – kapsa pod šikmou hranicí
+hardbox 30 560 170 660    # Cheb / Kynžvart
+seed 7221 90 615          # Cheb – pás nad jižní čarou
+hardbox 980 1453 1097 1509 # Pöggstall / Weinberg, Grafenegg
+seed 7396 1050 1482       # Pöggstall – kapsa pod severní hranicí
+hardbox 1432 1250 1511 1387 # Staatz / Zistersdorf
+seed 7422 1470 1280       # Staatz – kus mezi řekou a Staatz (západně od čáry x≈1493)
+hardbox 1259 900 1350 1041 # Pernštejn / Žďár n. Sázavou
+seed 7300 1305 955        # Pernštejn – kapsa u severní hranice
+seed 7300 1318 940        # Pernštejn – trojúhelník u Svojanova (pod šikmou čárou)
+hardbox 960 625 1010 665  # Kolín / Lipany (východ)
+seed 7269 992 641         # Kolín – pás nad čárou u řeky
+hardbox 680 690 720 760   # Karlštejn / Točník
+seed 7259 700 720         # Karlštejn – pás východně od čáry x≈690
+seed 7259 703 735
+seed 7259 698 742
+hardbox 1820 1090 1880 1125 # Uherské Hradiště / Zlín
+seed 7443 1838 1110       # Zlín – kapsa pod čárou
+seed 7422 1480 1298       # Staatz – jazyk západně od čáry x≈1493

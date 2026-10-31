@@ -151,7 +151,8 @@
     let REGIONS = null;
     async function loadRegions() {
         if (REGIONS) return REGIONS;
-        REGIONS = await (await fetch(chrome.runtime.getURL("regions.json"))).json();
+        const url = window.DEmapAssets.url("regions.json");
+        REGIONS = url ? await (await fetch(url)).json() : {};
         return REGIONS;
     }
     // grid origin v CONTENT souřadnicích #maps (scroll-kompenzace, viz map-fill)

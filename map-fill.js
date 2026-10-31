@@ -52,8 +52,10 @@
 
     function ready() {
         if (!readyPromise) {
-            readyPromise = fetch(chrome.runtime.getURL("regions.json"))
-                .then((r) => r.json())
+            // obrysy pro otevřenou mapu (běžné ligy / K liga), viz map-assets.js;
+            // liga bez obrysů → prázdná vrstva
+            const rurl = window.DEmapAssets.url("regions.json");
+            readyPromise = (rurl ? fetch(rurl).then((r) => r.json()) : Promise.resolve({}))
                 .then(buildLayer)
                 .catch((e) => { console.error("DEfill: regions.json", e); });
         }
@@ -94,7 +96,7 @@
         borderImg.setAttribute("y", "0");
         borderImg.setAttribute("width", MAP_W);
         borderImg.setAttribute("height", MAP_H);
-        const bhref = chrome.runtime.getURL("borders.png");
+        const bhref = window.DEmapAssets.url("borders.png") || "";
         borderImg.setAttributeNS("http://www.w3.org/1999/xlink", "href", bhref);
         borderImg.setAttribute("href", bhref);
         borderImg.style.display = "none";
