@@ -26,6 +26,7 @@
       ],
       "js": [
         "de-context.js",
+        "map-assets.js",
         "ui-kit.js",
         "map-fill.js",
         "spell-results.js",
@@ -46,7 +47,9 @@
       "resources": [
         "images/menu-icon.png",
         "regions.json",
-        "borders.png"
+        "borders.png",
+        "maps/K/regions.json",
+        "maps/K/borders.png"
       ],
       "matches": [
         "https://www.darkelf.cz/*"
