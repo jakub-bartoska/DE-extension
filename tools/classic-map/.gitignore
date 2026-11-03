@@ -1,0 +1,9 @@
+# pracovni cache a mezivysledky pipeline (desitky MB PNG/npy, vse znovu vyrobitelne)
+_regen_work/
+__pycache__/
+# mezivysledky vedle skriptu
+regions_new.json
+regions_g*.json
+borders_preview.png
+adjacency.json
+check.png
